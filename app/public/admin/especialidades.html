@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Especialidades - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <aside class="sidebar" id="sidebar-container"></aside>
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Gestión de Especialidades</h1>
+            <div class="header-actions">
+                <button onclick="abrirModalEspecialidad()" class="btn-primary">Nueva Especialidad</button>
+            </div>
+        </header>
+        <section class="table-card">
+            <div class="table-container">
+                <table id="especialidades-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Descripción</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="especialidades-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="modal-especialidad" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalEspecialidad()">&times;</span>
+            <h2 id="modal-titulo">Nueva Especialidad</h2>
+            <form id="especialidad-form">
+                <input type="hidden" id="id_especialidad" name="id_especialidad">
+                <div class="form-group">
+                    <label for="nombre">Nombre</label>
+                    <input type="text" id="nombre" name="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="descripcion">Descripción</label>
+                    <textarea id="descripcion" name="descripcion" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarEspecialidades();
+        });
+    </script>
+</body>
+</html>

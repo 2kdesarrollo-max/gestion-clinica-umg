@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión Clínica Integral UMG - Portal Paciente</title>
+    <link rel="stylesheet" href="css/portal.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">
+                <img src="/imagenes/logo-hospital.png" alt="Logo Hospital" onerror="this.src='https://via.placeholder.com/150x50?text=GCI-UMG'">
+                <span>GCI-UMG</span>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="#inicio">Inicio</a></li>
+                    <li><a href="#servicios">Servicios</a></li>
+                    <li><a href="#como-funciona">¿Cómo funciona?</a></li>
+                    <li id="nav-reservas" style="display:none;"><a href="mis-reservas.html">Mis Reservas</a></li>
+                    <li id="nav-login"><a href="login.html" class="btn-primary">Iniciar Sesión</a></li>
+                    <li id="nav-logout" style="display:none;"><a href="#" onclick="logout()" class="btn-outline">Cerrar Sesión</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <section id="inicio" class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1>Tu salud en buenas manos</h1>
+                <p>Reserva tus citas quirúrgicas de forma rápida, segura y desde la comodidad de tu hogar.</p>
+                <div class="hero-btns">
+                    <a href="solicitud.html" class="btn-primary">Solicitar Reserva</a>
+                    <a href="#servicios" class="btn-outline">Ver Especialidades</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="como-funciona" class="how-it-works">
+        <div class="container">
+            <h2>¿Cómo funciona?</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-icon">1</div>
+                    <h3>Regístrate</h3>
+                    <p>Crea tu cuenta de paciente con tus datos básicos.</p>
+                </div>
+                <div class="step">
+                    <div class="step-icon">2</div>
+                    <h3>Solicita</h3>
+                    <p>Elige la especialidad y describe tu necesidad médica.</p>
+                </div>
+                <div class="step">
+                    <div class="step-icon">3</div>
+                    <h3>Confirma</h3>
+                    <p>Recibe la aprobación y prepárate para tu cirugía.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="servicios" class="services">
+        <div class="container">
+            <h2>Nuestras Especialidades</h2>
+            <div class="service-grid" id="especialidades-grid">
+                <!-- Se cargará dinámicamente -->
+                <div class="service-card">
+                    <h3>Cirugía General</h3>
+                    <p>Procedimientos quirúrgicos generales con tecnología de punta.</p>
+                </div>
+                <div class="service-card">
+                    <h3>Cardiología</h3>
+                    <p>Cuidado especializado para el corazón y sistema cardiovascular.</p>
+                </div>
+                <div class="service-card">
+                    <h3>Ortopedia</h3>
+                    <p>Tratamiento de huesos, articulaciones y tejidos.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-info">
+                    <h3>GCI-UMG</h3>
+                    <p>Hospital Universitario Mariano Gálvez</p>
+                    <p>Ciudad de Guatemala, Guatemala</p>
+                </div>
+                <div class="footer-links">
+                    <h4>Enlaces Rápidos</h4>
+                    <ul>
+                        <li><a href="#inicio">Inicio</a></li>
+                        <li><a href="#servicios">Servicios</a></li>
+                        <li><a href="solicitud.html">Reservar</a></li>
+                    </ul>
+                </div>
+                <div class="footer-contact">
+                    <h4>Contacto</h4>
+                    <p>Tel: +502 2200-0000</p>
+                    <p>Email: info@hospital.umg.gt</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Gestión Clínica Integral UMG. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/portal.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('token_paciente');
+            if (token) {
+                document.getElementById('nav-login').style.display = 'none';
+                document.getElementById('nav-logout').style.display = 'block';
+                document.getElementById('nav-reservas').style.display = 'block';
+            }
+            cargarEspecialidadesHome();
+        });
+    </script>
+</body>
+</html>

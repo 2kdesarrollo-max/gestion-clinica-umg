@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar Sesión - Portal Paciente</title>
+    <link rel="stylesheet" href="css/portal.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <img src="/imagenes/logo-hospital.png" alt="Logo" onerror="this.src='https://via.placeholder.com/100x40?text=GCI-UMG'">
+                <h1>Iniciar Sesión</h1>
+                <p>Accede a tu portal de paciente</p>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required placeholder="tu@email.com">
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn-primary btn-block">Ingresar</button>
+            </form>
+            <div class="auth-footer">
+                <p>¿No tienes una cuenta? <a href="registro.html">Regístrate aquí</a></p>
+                <p><a href="index.html">Volver al inicio</a></p>
+            </div>
+        </div>
+    </div>
+    <script src="js/portal.js"></script>
+</body>
+</html>

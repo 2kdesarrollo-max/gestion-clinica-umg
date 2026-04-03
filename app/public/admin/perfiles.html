@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfiles - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <aside class="sidebar" id="sidebar-container"></aside>
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Perfiles y Privilegios</h1>
+            <div class="header-actions">
+                <button onclick="abrirModalPerfil()" class="btn-primary">Nuevo Perfil</button>
+            </div>
+        </header>
+        <section class="table-card">
+            <div class="table-container">
+                <table id="perfiles-table">
+                    <thead><tr><th>Nombre</th><th>Descripción</th><th>Privilegios</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody id="perfiles-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="modal-perfil" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalPerfil()">&times;</span>
+            <h2 id="modal-titulo">Nuevo Perfil</h2>
+            <form id="perfil-form">
+                <input type="hidden" id="id_perfil" name="id_perfil">
+                <div class="form-group"><label for="nombre">Nombre</label><input type="text" id="nombre" name="nombre" required></div>
+                <div class="form-group"><label for="descripcion">Descripción</label><input type="text" id="descripcion" name="descripcion" required></div>
+                
+                <label>Privilegios:</label>
+                <div class="privilegios-grid" id="privilegios-grid">
+                    <label><input type="checkbox" name="privilegios" value="dashboard"> Dashboard</label>
+                    <label><input type="checkbox" name="privilegios" value="pacientes"> Pacientes</label>
+                    <label><input type="checkbox" name="privilegios" value="medicos"> Médicos</label>
+                    <label><input type="checkbox" name="privilegios" value="especialidades"> Especialidades</label>
+                    <label><input type="checkbox" name="privilegios" value="quirofanos"> Quirófanos</label>
+                    <label><input type="checkbox" name="privilegios" value="equipos"> Equipos</label>
+                    <label><input type="checkbox" name="privilegios" value="reservas"> Reservas</label>
+                    <label><input type="checkbox" name="privilegios" value="emergencias"> Emergencias</label>
+                    <label><input type="checkbox" name="privilegios" value="reportes"> Reportes</label>
+                    <label><input type="checkbox" name="privilegios" value="usuarios"> Usuarios</label>
+                    <label><input type="checkbox" name="privilegios" value="perfiles"> Perfiles</label>
+                    <label><input type="checkbox" name="privilegios" value="monitoreo"> Monitoreo</label>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarPerfiles();
+        });
+    </script>
+</body>
+</html>

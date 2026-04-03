@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reportes - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <aside class="sidebar" id="sidebar-container"></aside>
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Reportes y Auditoría</h1>
+            <div class="header-actions">
+                <button onclick="exportarCSV()" class="btn-outline">Exportar a CSV</button>
+            </div>
+        </header>
+        
+        <div class="reportes-grid">
+            <div class="table-card">
+                <h2>Ocupación de Quirófanos</h2>
+                <div class="table-container">
+                    <table id="reporte-ocupacion">
+                        <thead><tr><th>Quirófano</th><th>Total Mes</th><th>% Ocupación</th></tr></thead>
+                        <tbody id="reporte-ocupacion-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="table-card">
+                <h2>Estadísticas por Médico</h2>
+                <div class="table-container">
+                    <table id="reporte-medicos">
+                        <thead><tr><th>Médico</th><th>Especialidad</th><th>Total</th><th>Completadas</th><th>Canceladas</th></tr></thead>
+                        <tbody id="reporte-medicos-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h2>Log de Auditoría (Últimos 100)</h2>
+                <div class="table-container">
+                    <table id="reporte-auditoria">
+                        <thead><tr><th>Tabla</th><th>Op</th><th>ID Reg</th><th>Valor Anterior</th><th>Valor Nuevo</th><th>Usuario</th><th>Fecha</th></tr></thead>
+                        <tbody id="reporte-auditoria-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarReportes();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usuarios - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <aside class="sidebar" id="sidebar-container"></aside>
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Gestión de Usuarios</h1>
+            <div class="header-actions">
+                <button onclick="abrirModalUsuario()" class="btn-primary">Nuevo Usuario</button>
+            </div>
+        </header>
+        <section class="table-card">
+            <div class="table-container">
+                <table id="usuarios-table">
+                    <thead><tr><th>Nombre</th><th>Usuario</th><th>Email</th><th>Perfil</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody id="usuarios-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="modal-usuario" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalUsuario()">&times;</span>
+            <h2 id="modal-titulo">Nuevo Usuario</h2>
+            <form id="usuario-form">
+                <input type="hidden" id="id_usuario" name="id_usuario">
+                <div class="form-row">
+                    <div class="form-group"><label for="nombre">Nombre</label><input type="text" id="nombre" name="nombre" required></div>
+                    <div class="form-group"><label for="apellido">Apellido</label><input type="text" id="apellido" name="apellido" required></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label for="username">Usuario</label><input type="text" id="username" name="username" required></div>
+                    <div class="form-group"><label for="email">Email</label><input type="email" id="email" name="email" required></div>
+                </div>
+                <div class="form-group" id="pass-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="id_perfil">Perfil</label>
+                    <select id="id_perfil" name="id_perfil" required></select>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarUsuarios();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quirófanos - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <aside class="sidebar" id="sidebar-container"></aside>
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Estado de Quirófanos</h1>
+        </header>
+        <section class="quirofanos-grid" id="quirofanos-grid">
+            <!-- Cargando... -->
+        </section>
+    </main>
+
+    <div id="modal-quirofano" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalQuirofano()">&times;</span>
+            <h2 id="modal-titulo-quirofano">Cambiar Estado</h2>
+            <form id="quirofano-form">
+                <input type="hidden" id="id_quirofano" name="id_quirofano">
+                <p id="quirofano-nombre">Quirófano A-101</p>
+                <div class="form-group">
+                    <label for="estado">Estado</label>
+                    <select id="estado" name="estado" required>
+                        <option value="DISPONIBLE">Disponible</option>
+                        <option value="OCUPADO">Ocupado</option>
+                        <option value="MANTENIMIENTO">Mantenimiento</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarQuirofanos();
+            setInterval(cargarQuirofanos, 30000); // Actualizar cada 30 segundos
+        });
+    </script>
+</body>
+</html>

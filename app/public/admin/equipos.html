@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equipos Médicos - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <aside class="sidebar" id="sidebar-container"></aside>
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Inventario de Equipos Médicos</h1>
+            <div class="header-actions">
+                <button onclick="abrirModalEquipo()" class="btn-primary">Nuevo Equipo</button>
+            </div>
+        </header>
+        <section class="table-card">
+            <div class="table-container">
+                <table id="equipos-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Descripción</th>
+                            <th>Total</th>
+                            <th>Disponible</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="equipos-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="modal-equipo" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalEquipo()">&times;</span>
+            <h2 id="modal-titulo">Nuevo Equipo</h2>
+            <form id="equipo-form">
+                <input type="hidden" id="id_equipo" name="id_equipo">
+                <div class="form-group">
+                    <label for="nombre">Nombre</label>
+                    <input type="text" id="nombre" name="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="descripcion">Descripción</label>
+                    <textarea id="descripcion" name="descripcion" rows="2"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cantidad_total">Cantidad Total</label>
+                        <input type="number" id="cantidad_total" name="cantidad_total" required min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="cantidad_disponible">Cantidad Disponible</label>
+                        <input type="number" id="cantidad_disponible" name="cantidad_disponible" required min="0">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarEquipos();
+        });
+    </script>
+</body>
+</html>

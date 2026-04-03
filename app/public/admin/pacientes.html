@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pacientes - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <!-- Sidebar será cargada dinámicamente -->
+    <aside class="sidebar" id="sidebar-container">
+        <!-- Contenido dinámico -->
+    </aside>
+
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Gestión de Pacientes</h1>
+            <div class="header-actions">
+                <button onclick="abrirModalPaciente()" class="btn-primary">Nuevo Paciente</button>
+            </div>
+        </header>
+
+        <section class="filters-card">
+            <input type="text" id="busqueda-paciente" placeholder="Buscar por nombre o apellido..." onkeyup="filtrarPacientes()">
+            <select id="filtro-genero" onchange="filtrarPacientes()">
+                <option value="">Todos los géneros</option>
+                <option value="MASCULINO">Masculino</option>
+                <option value="FEMENINO">Femenino</option>
+            </select>
+        </section>
+
+        <section class="table-card">
+            <div class="table-container">
+                <table id="pacientes-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre Completo</th>
+                            <th>Email</th>
+                            <th>Teléfono</th>
+                            <th>Género</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pacientes-body">
+                        <!-- Datos dinámicos -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal Paciente -->
+    <div id="modal-paciente" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalPaciente()">&times;</span>
+            <h2 id="modal-titulo">Nuevo Paciente</h2>
+            <form id="paciente-form">
+                <input type="hidden" id="id_paciente" name="id_paciente">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="nombre">Nombre</label>
+                        <input type="text" id="nombre" name="nombre" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="apellido">Apellido</label>
+                        <input type="text" id="apellido" name="apellido" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fecha_nacimiento">Fecha Nacimiento</label>
+                        <input type="date" id="fecha_nacimiento" name="fecha_nacimiento" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="genero">Género</label>
+                        <select id="genero" name="genero" required>
+                            <option value="MASCULINO">Masculino</option>
+                            <option value="FEMENINO">Femenino</option>
+                            <option value="OTRO">Otro</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="telefono">Teléfono</label>
+                    <input type="text" id="telefono" name="telefono">
+                </div>
+                <button type="submit" class="btn-primary btn-block">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarPacientes();
+        });
+    </script>
+</body>
+</html>

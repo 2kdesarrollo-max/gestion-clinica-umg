@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoreo - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <aside class="sidebar" id="sidebar-container"></aside>
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Monitoreo Oracle Database</h1>
+            <div class="header-actions">
+                <a href="http://192.168.0.16:3000" target="_blank" class="btn-primary">Ver Grafana</a>
+                <button onclick="cargarMonitoreo()" class="btn-refresh">Actualizar</button>
+            </div>
+        </header>
+        
+        <div class="monitoreo-grid">
+            <div class="table-card">
+                <h2>Sesiones Activas (V$SESSION)</h2>
+                <div class="table-container"><table id="mon-sesiones"><thead><tr><th>SID</th><th>Usuario</th><th>Estado</th><th>Máquina</th><th>Evento</th></tr></thead><tbody id="mon-sesiones-body"></tbody></table></div>
+            </div>
+            
+            <div class="table-card">
+                <h2>Bloqueos Activos (V$LOCK)</h2>
+                <div class="table-container"><table id="mon-bloqueos"><thead><tr><th>SID</th><th>Usuario</th><th>Tipo</th><th>Modo</th><th>Request</th><th>Bloquea?</th></tr></thead><tbody id="mon-bloqueos-body"></tbody></table></div>
+            </div>
+
+            <div class="table-card">
+                <h2>Top Consultas Lentas (V$SQL)</h2>
+                <div class="table-container"><table id="mon-top-sql"><thead><tr><th>SQL Text</th><th>Tiempo (ms)</th><th>Ejecs</th><th>Rows</th></tr></thead><tbody id="mon-top-sql-body"></tbody></table></div>
+            </div>
+        </div>
+    </main>
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarMonitoreo();
+            setInterval(cargarMonitoreo, 30000);
+        });
+    </script>
+</body>
+</html>

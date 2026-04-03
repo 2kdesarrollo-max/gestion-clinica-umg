@@ -1,0 +1,83 @@
+-- ============================================================
+-- Script: 07_optimizacion.sql
+-- Usuario: admin_optimizacion / Optimizacion123
+-- Base de datos: XEPDB1
+-- ============================================================
+
+SET TIMING ON
+SET AUTOTRACE ON
+
+-- PLAN 1: SELECT sin indice
+EXPLAIN PLAN FOR
+SELECT * FROM SUPERADMIN.RESERVAS WHERE id_medico = 1;
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 2: SELECT con indice
+EXPLAIN PLAN FOR
+SELECT * FROM SUPERADMIN.RESERVAS WHERE id_medico = 1;
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 3: JOIN sin optimizar
+EXPLAIN PLAN FOR
+SELECT r.*, m.nombre, m.apellido
+FROM SUPERADMIN.RESERVAS r, SUPERADMIN.MEDICOS m
+WHERE r.id_medico = m.id_medico;
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 4: JOIN optimizado
+EXPLAIN PLAN FOR
+SELECT /*+ USE_NL(r m) */ r.id_reserva, r.estado, m.nombre
+FROM SUPERADMIN.RESERVAS r
+JOIN SUPERADMIN.MEDICOS m ON r.id_medico = m.id_medico
+WHERE r.estado = 'APROBADA';
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 5: Partition pruning
+EXPLAIN PLAN FOR
+SELECT * FROM SUPERADMIN.RESERVAS
+WHERE fecha_reserva BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 6: Subconsulta vs JOIN
+EXPLAIN PLAN FOR
+SELECT * FROM SUPERADMIN.RESERVAS
+WHERE id_medico IN (SELECT id_medico FROM SUPERADMIN.MEDICOS WHERE activo=1);
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 7: Indice funcional UPPER
+EXPLAIN PLAN FOR
+SELECT * FROM SUPERADMIN.MEDICOS WHERE UPPER(nombre) = 'CARLOS';
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 8: Consulta de auditoria
+EXPLAIN PLAN FOR
+SELECT * FROM SUPERADMIN.AUDITORIA_RESERVAS
+WHERE usuario_oracle = 'SUPERADMIN'
+ORDER BY fecha_hora DESC;
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 9: MV vs Vista normal
+EXPLAIN PLAN FOR
+SELECT * FROM SUPERADMIN.MV_DISPONIBILIDAD_QUIROFANOS;
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- PLAN 10: Emergencias activas
+EXPLAIN PLAN FOR
+SELECT e.*, m.nombre medico, q.nombre quirofano
+FROM SUPERADMIN.EMERGENCIAS e
+JOIN SUPERADMIN.MEDICOS m ON e.id_medico = m.id_medico
+JOIN SUPERADMIN.QUIROFANOS q ON e.id_quirofano = q.id_quirofano
+WHERE e.estado = 'ACTIVA'
+ORDER BY e.nivel_prioridad;
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- Metricas de rendimiento
+SELECT usn, writes, xacts, undoblks FROM V$UNDOSTAT WHERE ROWNUM <= 5;
+SELECT name, gets, misses FROM V$LATCH WHERE name LIKE '%redo%';
+SELECT sql_text, elapsed_time, executions
+FROM V$SQL WHERE parsing_schema_name = 'SUPERADMIN'
+ORDER BY elapsed_time DESC FETCH FIRST 10 ROWS ONLY;
+
+SET TIMING OFF
+SET AUTOTRACE OFF
+COMMIT;

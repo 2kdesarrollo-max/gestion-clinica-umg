@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solicitar Reserva - Portal Paciente</title>
+    <link rel="stylesheet" href="css/portal.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body class="solicitud-page">
+    <header>
+        <div class="container">
+            <div class="logo">
+                <a href="index.html">GCI-UMG</a>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Inicio</a></li>
+                    <li><a href="mis-reservas.html">Mis Reservas</a></li>
+                    <li><a href="#" onclick="logout()" class="btn-outline">Cerrar Sesión</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="solicitud-container">
+            <h1>Solicitud de Reserva Quirúrgica</h1>
+            <p>Por favor, completa los datos de tu necesidad médica. Nuestro equipo médico revisará tu solicitud.</p>
+            <form id="solicitud-form" class="solicitud-form">
+                <div class="form-group">
+                    <label for="id_especialidad">Especialidad</label>
+                    <select id="id_especialidad" name="id_especialidad" required>
+                        <option value="">Cargando especialidades...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="tipo_cirugia">Tipo de Cirugía</label>
+                    <input type="text" id="tipo_cirugia" name="tipo_cirugia" placeholder="Ejem: Apendicectomía, Hernioplastia..." required>
+                </div>
+                <div class="form-group">
+                    <label for="descripcion">Descripción de tu necesidad médica</label>
+                    <textarea id="descripcion" name="descripcion" rows="5" placeholder="Describe brevemente tus síntomas o el diagnóstico médico recibido." required></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fecha">Fecha preferida</label>
+                        <input type="date" id="fecha" name="fecha" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prioridad">Nivel de Urgencia</label>
+                        <select id="prioridad" name="prioridad" required>
+                            <option value="NORMAL">Normal (Programada)</option>
+                            <option value="URGENTE">Urgente (Prioritaria)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="hora_inicio">Hora de inicio preferida</label>
+                        <input type="time" id="hora_inicio" name="hora_inicio" value="08:00" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="hora_fin">Hora de fin estimada</label>
+                        <input type="time" id="hora_fin" name="hora_fin" value="10:00" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Enviar Solicitud</button>
+            </form>
+        </div>
+    </main>
+
+    <script src="js/portal.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('token_paciente');
+            if (!token) {
+                window.location.href = 'login.html';
+                return;
+            }
+            cargarEspecialidadesSelect();
+        });
+    </script>
+</body>
+</html>

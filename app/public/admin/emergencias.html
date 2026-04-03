@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergencias - GCI-UMG Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+    <aside class="sidebar" id="sidebar-container"></aside>
+    <main class="admin-main">
+        <header class="main-header">
+            <h1>Gestión de Emergencias</h1>
+            <div class="header-actions">
+                <button onclick="abrirModalEmergencia()" class="btn-danger">Registrar Emergencia</button>
+            </div>
+        </header>
+        <section class="table-card">
+            <div class="table-container">
+                <table id="emergencias-table">
+                    <thead>
+                        <tr>
+                            <th>Paciente</th>
+                            <th>Quirófano</th>
+                            <th>Prioridad</th>
+                            <th>Médico</th>
+                            <th>Fecha/Hora</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="emergencias-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="modal-emergencia" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalEmergencia()">&times;</span>
+            <h2>Registrar Emergencia</h2>
+            <form id="emergencia-form">
+                <div class="form-group">
+                    <label for="id_paciente_emerg">Paciente</label>
+                    <select id="id_paciente_emerg" name="id_paciente" required></select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="id_medico_emerg">Médico</label>
+                        <select id="id_medico_emerg" name="id_medico" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_quirofano_emerg">Quirófano</label>
+                        <select id="id_quirofano_emerg" name="id_quirofano" required></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="nivel">Prioridad</label>
+                    <select id="nivel" name="nivel" required>
+                        <option value="CRITICA">Crítica (Interrupción inmediata)</option>
+                        <option value="ALTA">Alta</option>
+                        <option value="MEDIA">Media</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="descripcion">Descripción</label>
+                    <textarea id="descripcion" name="descripcion" rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn-danger btn-block">Procesar Emergencia</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('admin_user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+            initSidebar(user.privilegios);
+            cargarEmergencias();
+        });
+    </script>
+</body>
+</html>
