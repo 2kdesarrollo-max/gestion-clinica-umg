@@ -883,6 +883,12 @@ tr:hover { background-color: #f9f9f9; }
     letter-spacing: 0.2px;
 }
 
+.btn-logout-top {
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 12px;
+}
+
 .btn-primary:hover, .btn-danger:hover, .btn-outline:hover, .btn-logout:hover, .btn-refresh:hover {
     filter: brightness(0.96);
 }

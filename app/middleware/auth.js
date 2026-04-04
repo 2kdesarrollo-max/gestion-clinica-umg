@@ -2,6 +2,7 @@
 // Middleware de autenticación JWT
 // ============================================================
 const jwt = require('jsonwebtoken');
+const { getConnection } = require('../config/db');
 
 const DEFAULT_PRIVILEGIOS = [
   'dashboard',
@@ -56,24 +57,43 @@ function hasModuleWrite(privs, modulo) {
   return tokens.includes(m) || tokens.includes(`${m}:w`);
 }
 
-function verificarToken(req, res, next) {
+async function verificarToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) {
     return res.status(401).json({ error: 'Token requerido' });
   }
+  let conn;
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.usuario = decoded;
+    if (decoded && !decoded.tipo && decoded.id) {
+      conn = await getConnection();
+      const result = await conn.execute(
+        `SELECT u.id_usuario, u.activo, p.nombre perfil, p.privilegios
+         FROM USUARIOS_SISTEMA u
+         JOIN PERFILES_SISTEMA p ON u.id_perfil = p.id_perfil
+         WHERE u.id_usuario = :id AND u.activo = 1`,
+        { id: decoded.id }
+      );
+      if (!result.rows || result.rows.length === 0) {
+        return res.status(403).json({ error: 'Token inválido o expirado' });
+      }
+      const row = result.rows[0];
+      req.usuario.perfil = row.PERFIL;
+      req.usuario.privilegios = row.PRIVILEGIOS;
+    }
     next();
   } catch (err) {
     return res.status(403).json({ error: 'Token inválido o expirado' });
+  } finally {
+    if (conn) await conn.close();
   }
 }
 
 function verificarPerfil(...perfilesPermitidos) {
   return (req, res, next) => {
-    const mode = String(process.env.PERMISOS_MODE || 'OPEN').toUpperCase();
+    const mode = String(process.env.PERMISOS_MODE || 'STRICT').toUpperCase();
     if (mode === 'OPEN') return next();
     if (!perfilesPermitidos.includes(req.usuario.perfil)) {
       return res.status(403).json({
@@ -86,7 +106,7 @@ function verificarPerfil(...perfilesPermitidos) {
 
 function verificarPermiso(modulo, accion) {
   return (req, res, next) => {
-    const mode = String(process.env.PERMISOS_MODE || 'OPEN').toUpperCase();
+    const mode = String(process.env.PERMISOS_MODE || 'STRICT').toUpperCase();
     if (mode === 'OPEN') return next();
     const perfil = String(req.usuario?.perfil || '');
     if (perfil.toUpperCase() === 'ADMINISTRADOR') return next();

@@ -590,6 +590,8 @@ function initSidebar(privilegios) {
     nav.querySelectorAll('a').forEach(a => {
         a.addEventListener('click', () => setSidebarOpen(false));
     });
+
+    ensureHeaderLogout();
 }
 
 function setSidebarOpen(open) {
@@ -604,6 +606,24 @@ function toggleSidebar() {
     const sidebar = document.getElementById('sidebar-container');
     if (!sidebar) return;
     setSidebarOpen(!sidebar.classList.contains('open'));
+}
+
+function ensureHeaderLogout() {
+    const header = document.querySelector('.main-header');
+    if (!header) return;
+    let actions = header.querySelector('.header-actions');
+    if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'header-actions';
+        header.appendChild(actions);
+    }
+    if (actions.querySelector('.btn-logout-top')) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-outline btn-logout-top';
+    btn.textContent = 'Cerrar sesión';
+    btn.addEventListener('click', logoutAdmin);
+    actions.appendChild(btn);
 }
 
 async function cargarEspecialidadesFiltro() {
