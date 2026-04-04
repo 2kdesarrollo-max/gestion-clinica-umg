@@ -210,7 +210,7 @@ async function cargarMisReservas() {
                 <td><span class="badge badge-${res.ESTADO.toLowerCase()}">${res.ESTADO}</span></td>
                 <td>
                     <button class="btn-primary" onclick="verDetalle(${res.ID_RESERVA})">Ver</button>
-                    ${res.ESTADO === 'SOLICITADA' ? `<button class="btn-outline" onclick="cancelarReserva(${res.ID_RESERVA})">Cancelar</button>` : ''}
+                    ${(res.ESTADO === 'SOLICITADA' || res.ESTADO === 'APROBADA') ? `<button class="btn-outline" onclick="cancelarReserva(${res.ID_RESERVA})">Cancelar</button>` : ''}
                 </td>
             </tr>
         `).join('');

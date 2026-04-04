@@ -965,17 +965,26 @@ function openReservaDetail(idReserva) {
     `;
 
     let actionsHTML = `<a class="btn-outline" href="reservas.html">Abrir módulo</a>`;
-    if (String(r.ESTADO).toUpperCase() === 'SOLICITADA') {
+    const estado = String(r.ESTADO || '').toUpperCase();
+    if (estado === 'SOLICITADA') {
         actionsHTML = `
-            <button class="btn-primary" type="button" onclick="actualizarEstadoReserva(${r.ID_RESERVA}, 'APROBADA')">Aprobar</button>
+            <button class="btn-primary" type="button" onclick="programarDesdeSolicitud(${r.ID_RESERVA})">Programar</button>
+            <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
+            <a class="btn-outline" href="reservas.html">Abrir módulo</a>
+        `;
+    } else if (estado === 'APROBADA') {
+        actionsHTML = `
+            <button class="btn-outline" type="button" onclick="programarDesdeSolicitud(${r.ID_RESERVA})">Reprogramar</button>
+            <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
+            <a class="btn-outline" href="reservas.html">Abrir módulo</a>
+        `;
+    } else if (estado === 'EN_CURSO') {
+        actionsHTML = `
             <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
             <a class="btn-outline" href="reservas.html">Abrir módulo</a>
         `;
     } else {
-        actionsHTML = `
-            <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
-            <a class="btn-outline" href="reservas.html">Abrir módulo</a>
-        `;
+        actionsHTML = `<a class="btn-outline" href="reservas.html">Abrir módulo</a>`;
     }
 
     openDetailPanel({
@@ -1300,7 +1309,9 @@ async function cargarReservas() {
                 <td><span class="badge badge-${r.ESTADO.toLowerCase()}">${r.ESTADO}</span></td>
                 <td>
                     ${r.ESTADO === 'SOLICITADA' ? `<button onclick="programarReserva(${r.ID_RESERVA})" class="btn-primary">Programar</button>` : ''}
+                    ${r.ESTADO === 'APROBADA' ? `<button onclick="programarReserva(${r.ID_RESERVA})" class="btn-outline">Reprogramar</button>` : ''}
                     <button onclick="verDisponibilidadReserva(${r.ID_RESERVA})" class="btn-outline">Disponibilidad</button>
+                    ${(r.ESTADO === 'SOLICITADA' || r.ESTADO === 'APROBADA') ? `<button onclick="cancelarReservaAdmin(${r.ID_RESERVA})" class="btn-danger">Cancelar</button>` : ''}
                 </td>
             </tr>
         `).join('');

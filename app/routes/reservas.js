@@ -52,6 +52,9 @@ router.get('/', verificarToken, async (req, res) => {
 
 // Obtener reservas por paciente
 router.get('/paciente/:id', verificarToken, async (req, res) => {
+  if (req.usuario?.tipo === 'PACIENTE' && String(req.usuario.id) !== String(req.params.id)) {
+    return res.status(403).json({ error: 'No tienes permisos para ver las reservas de otro paciente' });
+  }
   let conn;
   try {
     conn = await getConnection();
@@ -208,6 +211,25 @@ router.delete('/:id', verificarToken, async (req, res) => {
   let conn;
   try {
     conn = await getConnection();
+    if (req.usuario?.tipo === 'PACIENTE') {
+      const check = await conn.execute(
+        `SELECT id_paciente, estado
+         FROM RESERVAS
+         WHERE id_reserva = :id`,
+        { id: req.params.id }
+      );
+      if (!check.rows || check.rows.length === 0) {
+        return res.status(404).json({ error: 'Reserva no encontrada' });
+      }
+      const row = check.rows[0];
+      if (String(row.ID_PACIENTE) !== String(req.usuario.id)) {
+        return res.status(403).json({ error: 'No puedes cancelar una reserva de otro paciente' });
+      }
+      const estado = String(row.ESTADO || '').toUpperCase();
+      if (estado !== 'SOLICITADA' && estado !== 'APROBADA') {
+        return res.status(409).json({ error: 'Esta reserva ya no se puede cancelar' });
+      }
+    }
     await conn.execute(
       `BEGIN SP_CANCELAR_RESERVA(:id, :motivo, :cancelado_por); END;`,
       { id: req.params.id, motivo: motivo || 'Cancelado por usuario', cancelado_por: obtenerActor(req.usuario) }
