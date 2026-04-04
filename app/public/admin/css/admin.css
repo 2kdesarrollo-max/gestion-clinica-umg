@@ -912,6 +912,27 @@ tr:hover { background-color: #f9f9f9; }
     filter: brightness(0.96);
 }
 
+.password-wrap {
+    position: relative;
+}
+
+.password-wrap input[type="password"], .password-wrap input[type="text"] {
+    padding-right: 62px;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 34px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(16,24,40,0.14);
+    background: rgba(255,255,255,0.85);
+    cursor: pointer;
+    font-weight: 650;
+}
+
 /* Quirófanos Grid */
 .quirofanos-grid {
     display: grid;

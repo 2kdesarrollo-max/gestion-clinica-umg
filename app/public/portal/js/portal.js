@@ -9,6 +9,27 @@ function clamp(n, min, max) {
     return Math.max(min, Math.min(max, n));
 }
 
+function initPasswordToggles() {
+    document.querySelectorAll('.password-toggle').forEach(btn => {
+        if (btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target') || '';
+            const input = targetId ? document.getElementById(targetId) : btn.closest('.password-wrap')?.querySelector('input[type="password"], input[type="text"]');
+            if (!(input instanceof HTMLInputElement)) return;
+            const nextType = input.type === 'password' ? 'text' : 'password';
+            input.type = nextType;
+            btn.textContent = nextType === 'password' ? 'Ver' : 'Ocultar';
+        });
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPasswordToggles);
+} else {
+    initPasswordToggles();
+}
+
 function initFloatingModals() {
     let drag = null;
 

@@ -508,7 +508,12 @@ async function cancelarReservaAdmin(idReserva) {
         await client.delete(`/reservas/${idReserva}`, { motivo });
         showToast('Reserva cancelada', 'success');
         closeDetailPanel();
-        await refreshDashboard();
+        const reservasBody = document.getElementById('reservas-body');
+        if (reservasBody) {
+            await cargarReservas();
+        } else {
+            await refreshDashboard();
+        }
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -964,27 +969,26 @@ function openReservaDetail(idReserva) {
         </div>
     `;
 
-    let actionsHTML = `<a class="btn-outline" href="reservas.html">Abrir módulo</a>`;
     const estado = String(r.ESTADO || '').toUpperCase();
+    const baseLink = `reservas.html?id=${encodeURIComponent(String(r.ID_RESERVA))}`;
+    let actionsHTML = `<a class="btn-outline" href="${baseLink}">Abrir en Reservas</a>`;
     if (estado === 'SOLICITADA') {
         actionsHTML = `
-            <button class="btn-primary" type="button" onclick="programarDesdeSolicitud(${r.ID_RESERVA})">Programar</button>
-            <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
-            <a class="btn-outline" href="reservas.html">Abrir módulo</a>
+            <a class="btn-primary" href="${baseLink}&action=programar">Programar</a>
+            <a class="btn-danger" href="${baseLink}&action=cancelar">Cancelar</a>
+            <a class="btn-outline" href="${baseLink}">Abrir en Reservas</a>
         `;
     } else if (estado === 'APROBADA') {
         actionsHTML = `
-            <button class="btn-outline" type="button" onclick="programarDesdeSolicitud(${r.ID_RESERVA})">Reprogramar</button>
-            <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
-            <a class="btn-outline" href="reservas.html">Abrir módulo</a>
+            <a class="btn-outline" href="${baseLink}&action=reprogramar">Reprogramar</a>
+            <a class="btn-danger" href="${baseLink}&action=cancelar">Cancelar</a>
+            <a class="btn-outline" href="${baseLink}">Abrir en Reservas</a>
         `;
     } else if (estado === 'EN_CURSO') {
         actionsHTML = `
-            <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
-            <a class="btn-outline" href="reservas.html">Abrir módulo</a>
+            <a class="btn-danger" href="${baseLink}&action=cancelar">Cancelar</a>
+            <a class="btn-outline" href="${baseLink}">Abrir en Reservas</a>
         `;
-    } else {
-        actionsHTML = `<a class="btn-outline" href="reservas.html">Abrir módulo</a>`;
     }
 
     openDetailPanel({
@@ -1315,9 +1319,37 @@ async function cargarReservas() {
                 </td>
             </tr>
         `).join('');
+        applyReservasDeepLink();
     } catch (err) {
         body.innerHTML = '<tr><td colspan="7">Error al cargar reservas.</td></tr>';
     }
+}
+
+function applyReservasDeepLink() {
+    if (window.__reservasDeeplinkApplied) return;
+    const params = new URLSearchParams(window.location.search || '');
+    const idRaw = params.get('id') || params.get('reserva') || params.get('reservaId');
+    const action = String(params.get('action') || '').toLowerCase();
+    if (!idRaw) return;
+    const id = Number(idRaw);
+    if (!Number.isFinite(id)) return;
+
+    const r = reservasCache.find(x => Number(x.ID_RESERVA) === id);
+    if (!r) return;
+
+    window.__reservasDeeplinkApplied = true;
+    if (action === 'cancelar') {
+        cancelarReservaAdmin(id).finally(() => {
+            history.replaceState(null, '', 'reservas.html');
+        });
+        return;
+    }
+    if (action === 'programar' || action === 'reprogramar') {
+        programarReserva(id);
+        history.replaceState(null, '', 'reservas.html');
+        return;
+    }
+    history.replaceState(null, '', 'reservas.html');
 }
 
 function programarReserva(idReserva) {
@@ -2349,4 +2381,25 @@ function logoutAdmin() {
 function exportarCSV() {
     alert('Función de exportación básica activada. Descargando datos...');
     // Implementación simple de exportación CSV
+}
+
+function initPasswordToggles() {
+    document.querySelectorAll('.password-toggle').forEach(btn => {
+        if (btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target') || '';
+            const input = targetId ? document.getElementById(targetId) : btn.closest('.password-wrap')?.querySelector('input[type="password"], input[type="text"]');
+            if (!(input instanceof HTMLInputElement)) return;
+            const nextType = input.type === 'password' ? 'text' : 'password';
+            input.type = nextType;
+            btn.textContent = nextType === 'password' ? 'Ver' : 'Ocultar';
+        });
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPasswordToggles);
+} else {
+    initPasswordToggles();
 }

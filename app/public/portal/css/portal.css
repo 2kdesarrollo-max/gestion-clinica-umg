@@ -281,6 +281,27 @@ footer {
     font-family: inherit;
 }
 
+.password-wrap {
+    position: relative;
+}
+
+.password-wrap input[type="password"], .password-wrap input[type="text"] {
+    padding-right: 64px;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 34px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(16,24,40,0.14);
+    background: rgba(255,255,255,0.92);
+    cursor: pointer;
+    font-weight: 650;
+}
+
 .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
