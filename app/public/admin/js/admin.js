@@ -103,7 +103,18 @@ function getPrivilegeTokens(user) {
             .map(v => String(v).trim().toLowerCase())
             .filter(Boolean);
     }
-    return String(privs)
+    const raw = String(privs).trim();
+    if (raw.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                return parsed
+                    .map(v => String(v).trim().toLowerCase())
+                    .filter(Boolean);
+            }
+        } catch {}
+    }
+    return raw
         .split(',')
         .map(s => s.trim().toLowerCase())
         .filter(Boolean);
