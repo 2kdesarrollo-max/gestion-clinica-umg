@@ -5,12 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - GCI-UMG Admin</title>
     <link rel="stylesheet" href="css/admin.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body class="admin-body">
     <aside class="sidebar">
         <div class="sidebar-header">
-            <img src="/imagenes/logo-hospital.png" alt="Logo" onerror="this.src='https://via.placeholder.com/150x50?text=GCI-UMG'">
+            <img src="/imagenes/emojihospital.png" alt="Logo" style="height: 60px;">
             <h2>Admin GCI-UMG</h2>
         </div>
         <nav id="sidebar-nav">
@@ -27,88 +26,173 @@
 
     <main class="admin-main">
         <header class="main-header">
-            <h1>Dashboard</h1>
+            <h1>Operación del Día</h1>
             <div class="header-actions">
+                <input type="date" id="op-date" class="input-date">
+                <button onclick="abrirModalReservaDesdeDashboard()" class="btn-primary">Nueva Reserva</button>
                 <span id="last-refresh">Actualizado: --:--:--</span>
                 <button onclick="refreshDashboard()" class="btn-refresh">Actualizar</button>
             </div>
         </header>
 
-        <section class="stats-grid">
-            <div class="stat-card">
-                <h3>Quirófanos Libres</h3>
-                <p id="stat-quirofanos" class="stat-value">--</p>
-            </div>
-            <div class="stat-card warning">
-                <h3>Reservas Pendientes</h3>
-                <p id="stat-reservas" class="stat-value">--</p>
-            </div>
-            <div class="stat-card danger">
-                <h3>Emergencias Activas</h3>
-                <p id="stat-emergencias" class="stat-value">--</p>
-            </div>
-            <div class="stat-card success">
-                <h3>Cirugías Completadas</h3>
-                <p id="stat-completadas" class="stat-value">--</p>
-            </div>
+        <section class="op-kpis">
+            <a class="kpi kpi-link" href="quirofanos.html">
+                <span class="kpi-label">Quirófanos libres</span>
+                <span class="kpi-value" id="stat-quirofanos">--</span>
+            </a>
+            <a class="kpi kpi-link" href="reservas.html">
+                <span class="kpi-label">Solicitudes</span>
+                <span class="kpi-value" id="stat-reservas">--</span>
+            </a>
+            <a class="kpi kpi-link" href="emergencias.html">
+                <span class="kpi-label">Emergencias</span>
+                <span class="kpi-value" id="stat-emergencias">--</span>
+            </a>
+            <a class="kpi kpi-link" href="reservas.html">
+                <span class="kpi-label">Completadas</span>
+                <span class="kpi-value" id="stat-completadas">--</span>
+            </a>
         </section>
 
-        <section class="dashboard-tables">
+        <section class="op-tabs" role="tablist">
+            <button class="tab-btn active" data-tab="matriz" type="button">Matriz del día</button>
+            <button class="tab-btn" data-tab="solicitudes" type="button">Cola de solicitudes</button>
+            <button class="tab-btn" data-tab="alertas" type="button">Alertas</button>
+        </section>
+
+        <section class="op-view" id="tab-matriz">
+            <div id="scheduler-root" class="scheduler-root"></div>
+        </section>
+
+        <section class="op-view hidden" id="tab-solicitudes">
             <div class="table-card">
-                <h2>Últimas Reservas</h2>
                 <div class="table-container">
-                    <table id="ultimas-reservas">
+                    <table>
                         <thead>
                             <tr>
+                                <th>ID</th>
                                 <th>Paciente</th>
                                 <th>Cirugía</th>
                                 <th>Fecha</th>
-                                <th>Estado</th>
                                 <th>Acción</th>
                             </tr>
                         </thead>
-                        <tbody id="ultimas-reservas-body">
-                            <!-- Datos dinámicos -->
-                        </tbody>
+                        <tbody id="solicitudes-body"></tbody>
                     </table>
                 </div>
             </div>
+        </section>
 
+        <section class="op-view hidden" id="tab-alertas">
             <div class="table-card">
-                <h2>Emergencias Activas</h2>
                 <div class="table-container">
-                    <table id="emergencias-activas">
+                    <table>
                         <thead>
                             <tr>
-                                <th>Paciente</th>
-                                <th>Quirófano</th>
-                                <th>Prioridad</th>
-                                <th>Hora</th>
+                                <th>Tipo</th>
+                                <th>Detalle</th>
                                 <th>Acción</th>
                             </tr>
                         </thead>
-                        <tbody id="emergencias-activas-body">
-                            <!-- Datos dinámicos -->
-                        </tbody>
+                        <tbody id="alertas-body"></tbody>
                     </table>
                 </div>
             </div>
         </section>
     </main>
 
+    <aside id="detail-panel" class="detail-panel" aria-hidden="true">
+        <div class="detail-header">
+            <div>
+                <div class="detail-title" id="detail-title">Detalle</div>
+                <div class="detail-subtitle" id="detail-subtitle"></div>
+            </div>
+            <button class="btn-outline" type="button" onclick="closeDetailPanel()">Cerrar</button>
+        </div>
+        <div class="detail-body" id="detail-body"></div>
+        <div class="detail-actions" id="detail-actions"></div>
+    </aside>
+
+    <div id="toast-root" class="toast-root"></div>
+
+    <div id="modal-reserva" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalReserva()">&times;</span>
+            <h2 id="modal-titulo">Nueva Reserva</h2>
+            <form id="reserva-form">
+                <input type="hidden" id="id_reserva" name="id_reserva">
+                <div class="form-group">
+                    <label for="id_paciente">Paciente</label>
+                    <select id="id_paciente" name="id_paciente" required></select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="id_medico">Médico</label>
+                        <select id="id_medico" name="id_medico" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_quirofano">Quirófano</label>
+                        <select id="id_quirofano" name="id_quirofano" required></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="id_especialidad">Especialidad</label>
+                    <select id="id_especialidad" name="id_especialidad" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="tipo_cirugia">Tipo de Cirugía</label>
+                    <input type="text" id="tipo_cirugia" name="tipo_cirugia" required>
+                </div>
+                <div class="form-group">
+                    <label for="prioridad">Prioridad</label>
+                    <select id="prioridad" name="prioridad" required>
+                        <option value="NORMAL">NORMAL</option>
+                        <option value="URGENTE">URGENTE</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="descripcion">Descripción</label>
+                    <textarea id="descripcion" name="descripcion" rows="2"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fecha">Fecha</label>
+                        <input type="date" id="fecha" name="fecha" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="hora_inicio">Hora Inicio</label>
+                        <input type="time" id="hora_inicio" name="hora_inicio" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="hora_fin">Hora Fin</label>
+                        <input type="time" id="hora_fin" name="hora_fin" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary btn-block">Guardar Reserva</button>
+            </form>
+        </div>
+    </div>
+
     <script src="js/admin.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const user = JSON.parse(localStorage.getItem('admin_user'));
             if (!user) {
-                window.location.href = 'login.html';
+                document.body.innerHTML = `
+                    <div class="unauth-overlay">
+                        <div class="unauth-card">
+                            <div class="unauth-title">Sesión no encontrada</div>
+                            <div class="unauth-text">Inicia sesión para acceder al panel operativo.</div>
+                            <a class="btn-primary" href="index.html">Ir a login</a>
+                        </div>
+                    </div>
+                `;
                 return;
             }
             initSidebar(user.privilegios);
             document.getElementById('user-name').innerText = user.nombre;
             document.getElementById('user-role').innerText = user.perfil;
-            refreshDashboard();
-            setInterval(refreshDashboard, 60000); // Auto-refresh cada minuto
+            initDashboardPage();
         });
     </script>
 </body>

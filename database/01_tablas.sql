@@ -61,6 +61,7 @@ CREATE TABLE PACIENTES (
   direccion         VARCHAR2(200),
   tipo_sangre       VARCHAR2(5),
   alergias          VARCHAR2(300),
+  password_hash     VARCHAR2(200),
   fecha_registro    DATE DEFAULT SYSDATE,
   activo            NUMBER(1) DEFAULT 1 CHECK (activo IN (0,1))
 );

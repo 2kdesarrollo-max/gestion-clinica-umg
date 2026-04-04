@@ -3,8 +3,8 @@ const router = express.Router();
 const { getConnection } = require('../config/db');
 const { verificarToken } = require('../middleware/auth');
 
-// Obtener todas las especialidades
-router.get('/', verificarToken, async (req, res) => {
+// Obtener todas las especialidades (Público)
+router.get('/', async (req, res) => {
   let conn;
   try {
     conn = await getConnection();

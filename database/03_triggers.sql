@@ -59,29 +59,64 @@ SHOW ERRORS;
 
 -- TRIGGER 2: Prevenir sobreasignacion de quirofanos
 CREATE OR REPLACE TRIGGER TRG_PREVENIR_SOBREASIGNACION
-BEFORE INSERT OR UPDATE ON SUPERADMIN.RESERVAS
-FOR EACH ROW
-WHEN (NEW.estado NOT IN ('CANCELADA','COMPLETADA'))
-DECLARE
-  v_count NUMBER;
-BEGIN
-  SELECT COUNT(*) INTO v_count
-  FROM SUPERADMIN.RESERVAS
-  WHERE id_quirofano = :NEW.id_quirofano
-    AND id_reserva <> NVL(:NEW.id_reserva, -1)
-    AND estado NOT IN ('CANCELADA','COMPLETADA')
-    AND TRUNC(fecha_reserva) = TRUNC(:NEW.fecha_reserva)
-    AND (hora_inicio < :NEW.hora_fin AND hora_fin > :NEW.hora_inicio);
-  IF v_count > 0 THEN
-    RAISE_APPLICATION_ERROR(-20001,
-      'El quirofano ya tiene una reserva en ese horario.');
-  END IF;
-END;
+FOR INSERT OR UPDATE ON SUPERADMIN.RESERVAS
+COMPOUND TRIGGER
+  TYPE t_reserva IS RECORD (
+    id_reserva   SUPERADMIN.RESERVAS.id_reserva%TYPE,
+    id_quirofano SUPERADMIN.RESERVAS.id_quirofano%TYPE,
+    fecha_res    SUPERADMIN.RESERVAS.fecha_reserva%TYPE,
+    hora_ini     SUPERADMIN.RESERVAS.hora_inicio%TYPE,
+    hora_fin     SUPERADMIN.RESERVAS.hora_fin%TYPE,
+    estado       SUPERADMIN.RESERVAS.estado%TYPE
+  );
+
+  TYPE t_reserva_tab IS TABLE OF t_reserva INDEX BY PLS_INTEGER;
+  g_reservas t_reserva_tab;
+  g_idx PLS_INTEGER := 0;
+
+  BEFORE STATEMENT IS
+  BEGIN
+    g_reservas.DELETE;
+    g_idx := 0;
+  END BEFORE STATEMENT;
+
+  AFTER EACH ROW IS
+  BEGIN
+    IF :NEW.estado IN ('APROBADA','EN_CURSO') THEN
+      g_idx := g_idx + 1;
+      g_reservas(g_idx).id_reserva := :NEW.id_reserva;
+      g_reservas(g_idx).id_quirofano := :NEW.id_quirofano;
+      g_reservas(g_idx).fecha_res := :NEW.fecha_reserva;
+      g_reservas(g_idx).hora_ini := :NEW.hora_inicio;
+      g_reservas(g_idx).hora_fin := :NEW.hora_fin;
+      g_reservas(g_idx).estado := :NEW.estado;
+    END IF;
+  END AFTER EACH ROW;
+
+  AFTER STATEMENT IS
+    v_count NUMBER;
+  BEGIN
+    FOR i IN 1..g_idx LOOP
+      EXIT WHEN NOT g_reservas.EXISTS(i);
+      SELECT COUNT(*) INTO v_count
+      FROM SUPERADMIN.RESERVAS r
+      WHERE r.id_quirofano = g_reservas(i).id_quirofano
+        AND r.id_reserva <> g_reservas(i).id_reserva
+        AND r.estado IN ('APROBADA','EN_CURSO')
+        AND TRUNC(r.fecha_reserva) = TRUNC(g_reservas(i).fecha_res)
+        AND (r.hora_inicio < g_reservas(i).hora_fin AND r.hora_fin > g_reservas(i).hora_ini);
+
+      IF v_count > 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'El quirofano ya tiene una reserva en ese horario.');
+      END IF;
+    END LOOP;
+  END AFTER STATEMENT;
+END TRG_PREVENIR_SOBREASIGNACION;
 /
 SHOW ERRORS;
 
 -- TRIGGER 3: Prioridad de emergencias
-CREATE OR REPLACE REPLACE TRIGGER TRG_PRIORIDAD_EMERGENCIA
+CREATE OR REPLACE TRIGGER TRG_PRIORIDAD_EMERGENCIA
 AFTER INSERT ON SUPERADMIN.EMERGENCIAS
 FOR EACH ROW
 WHEN (NEW.nivel_prioridad IN ('CRITICA','ALTA'))

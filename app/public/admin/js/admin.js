@@ -48,29 +48,381 @@ class APIClient {
     async get(endpoint) { return await this.fetch(endpoint); }
     async post(endpoint, data) { return await this.fetch(endpoint, { method: 'POST', body: JSON.stringify(data) }); }
     async put(endpoint, data) { return await this.fetch(endpoint, { method: 'PUT', body: JSON.stringify(data) }); }
-    async delete(endpoint) { return await this.fetch(endpoint, { method: 'DELETE' }); }
+    async delete(endpoint, data) {
+        const opts = { method: 'DELETE' };
+        if (data !== undefined) {
+            opts.body = JSON.stringify(data);
+        }
+        return await this.fetch(endpoint, opts);
+    }
 }
 
 const client = new APIClient();
+let pacientesCache = [];
+let medicosCache = [];
+let especialidadesCache = [];
+let equiposCache = [];
+let perfilesCache = [];
+let reservasCache = [];
+let reservaPreset = null;
+
+function getTodayStr() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function ensureToastRoot() {
+    let root = document.getElementById('toast-root');
+    if (!root) {
+        root = document.createElement('div');
+        root.id = 'toast-root';
+        root.className = 'toast-root';
+        document.body.appendChild(root);
+    }
+    return root;
+}
+
+function showToast(message, type = 'info') {
+    const root = ensureToastRoot();
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = message;
+    root.appendChild(el);
+    setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-6px)';
+        setTimeout(() => el.remove(), 220);
+    }, 3200);
+}
+
+function setActiveTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    const matriz = document.getElementById('tab-matriz');
+    const solicitudes = document.getElementById('tab-solicitudes');
+    const alertas = document.getElementById('tab-alertas');
+    if (matriz) matriz.classList.toggle('hidden', tab !== 'matriz');
+    if (solicitudes) solicitudes.classList.toggle('hidden', tab !== 'solicitudes');
+    if (alertas) alertas.classList.toggle('hidden', tab !== 'alertas');
+}
+
+function getSelectedDateStr() {
+    const input = document.getElementById('op-date');
+    return input?.value || getTodayStr();
+}
+
+function initDashboardPage() {
+    const dateInput = document.getElementById('op-date');
+    if (dateInput) {
+        dateInput.value = getTodayStr();
+        dateInput.addEventListener('change', () => refreshDashboard());
+    }
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+    });
+    setActiveTab('matriz');
+    refreshDashboard();
+}
+
+let monitoreoTimer = null;
+let monSeries = {
+    ts: [],
+    sesiones: [],
+    activas: [],
+    waitsByClass: {}
+};
+
+function pushMonPoint({ ts, sesiones, activas }) {
+    monSeries.ts.push(ts);
+    monSeries.sesiones.push(Number(sesiones ?? 0));
+    monSeries.activas.push(Number(activas ?? 0));
+    const maxPoints = 60;
+    if (monSeries.ts.length > maxPoints) {
+        monSeries.ts = monSeries.ts.slice(-maxPoints);
+        monSeries.sesiones = monSeries.sesiones.slice(-maxPoints);
+        monSeries.activas = monSeries.activas.slice(-maxPoints);
+    }
+}
+
+function upsertWaitsByClass(rows) {
+    const map = {};
+    (Array.isArray(rows) ? rows : []).forEach(r => {
+        const cls = r.WAIT_CLASS || 'Other';
+        map[cls] = (map[cls] || 0) + Number(r.CNT || 0);
+    });
+    monSeries.waitsByClass = map;
+}
+
+function getCanvas(ctxOrId) {
+    if (typeof ctxOrId === 'string') return document.getElementById(ctxOrId);
+    return ctxOrId;
+}
+
+function drawLineChart(canvasId, seriesA, seriesB, labels) {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const padL = 44;
+    const padR = 12;
+    const padT = 14;
+    const padB = 28;
+    const innerW = w - padL - padR;
+    const innerH = h - padT - padB;
+
+    const values = [...seriesA, ...seriesB].map(n => Number(n || 0));
+    const maxV = Math.max(1, ...values);
+    const minV = 0;
+
+    ctx.strokeStyle = 'rgba(16,24,40,0.10)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = padT + (innerH * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padL + innerW, y);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(31,41,55,0.65)';
+    ctx.font = '12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i <= 4; i++) {
+        const v = Math.round(maxV - ((maxV - minV) * i) / 4);
+        const y = padT + (innerH * i) / 4;
+        ctx.fillText(String(v), padL - 8, y);
+    }
+
+    function drawSeries(series, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        series.forEach((v, i) => {
+            const x = padL + (innerW * (series.length <= 1 ? 0 : i / (series.length - 1)));
+            const y = padT + innerH * (1 - (Number(v || 0) - minV) / (maxV - minV));
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    }
+
+    drawSeries(seriesA, 'rgba(15,42,67,0.88)');
+    drawSeries(seriesB, 'rgba(27,110,168,0.88)');
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = 'rgba(31,41,55,0.70)';
+    const lastLabel = labels && labels.length ? labels[labels.length - 1] : '';
+    ctx.fillText(lastLabel, padL, h - 10);
+}
+
+function drawBarChart(canvasId, items) {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const padL = 16;
+    const padR = 16;
+    const padT = 14;
+    const padB = 26;
+    const innerW = w - padL - padR;
+    const innerH = h - padT - padB;
+
+    const maxV = Math.max(1, ...items.map(i => i.value));
+    const barGap = 10;
+    const barW = items.length ? Math.max(18, (innerW - barGap * (items.length - 1)) / items.length) : innerW;
+
+    ctx.fillStyle = 'rgba(31,41,55,0.65)';
+    ctx.font = '12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    items.forEach((it, idx) => {
+        const x = padL + idx * (barW + barGap);
+        const bh = (innerH * it.value) / maxV;
+        const y = padT + (innerH - bh);
+        ctx.fillStyle = 'rgba(27,110,168,0.85)';
+        ctx.fillRect(x, y, barW, bh);
+        ctx.fillStyle = 'rgba(31,41,55,0.7)';
+        ctx.fillText(it.label, x + barW / 2, h - 18);
+    });
+
+    canvas.__barItems = items;
+    canvas.__barGeometry = { padL, padT, innerH, barW, barGap };
+}
+
+function setActiveMonTab(tab) {
+    const tabs = document.querySelectorAll('.op-tabs .tab-btn');
+    const ids = ['overview', 'charts', 'sesiones', 'bloqueos', 'waits', 'sql', 'tx'];
+    if (!ids.includes(tab)) tab = 'overview';
+
+    tabs.forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+    });
+
+    ids.forEach(id => {
+        const el = document.getElementById(`tab-${id}`);
+        if (el) el.classList.toggle('hidden', id !== tab);
+    });
+}
+
+function stopMonitoreoAuto() {
+    if (monitoreoTimer) clearInterval(monitoreoTimer);
+    monitoreoTimer = null;
+}
+
+function startMonitoreoAuto() {
+    stopMonitoreoAuto();
+    const enabled = document.getElementById('mon-auto')?.checked;
+    if (!enabled) return;
+    const seconds = Number(document.getElementById('mon-interval')?.value || 30);
+    const ms = Math.max(5000, seconds * 1000);
+    monitoreoTimer = setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        cargarMonitoreo();
+    }, ms);
+}
+
+function initMonitoreoPage() {
+    const tabs = document.querySelectorAll('.op-tabs .tab-btn');
+    tabs.forEach(btn => btn.addEventListener('click', () => setActiveMonTab(btn.dataset.tab)));
+    setActiveMonTab('overview');
+
+    document.getElementById('mon-auto')?.addEventListener('change', startMonitoreoAuto);
+    document.getElementById('mon-interval')?.addEventListener('change', startMonitoreoAuto);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') startMonitoreoAuto();
+    });
+
+    const filter = document.getElementById('mon-filter-sesiones');
+    if (filter) {
+        filter.addEventListener('input', () => {
+            const q = filter.value.toLowerCase();
+            document.querySelectorAll('#mon-sesiones-body tr').forEach(tr => {
+                tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        });
+    }
+
+    cargarMonitoreo();
+    startMonitoreoAuto();
+
+    const bar = document.getElementById('chart-waits');
+    if (bar) {
+        bar.addEventListener('click', (ev) => {
+            const rect = bar.getBoundingClientRect();
+            const x = (ev.clientX - rect.left) * (bar.width / rect.width);
+            const geom = bar.__barGeometry;
+            const items = bar.__barItems || [];
+            if (!geom || !items.length) return;
+            const idx = Math.floor((x - geom.padL) / (geom.barW + geom.barGap));
+            if (idx < 0 || idx >= items.length) return;
+            const label = items[idx].fullLabel || items[idx].label;
+            const filter = document.getElementById('mon-filter-sesiones');
+            if (filter) filter.value = label;
+            setActiveMonTab('sesiones');
+            filter?.dispatchEvent(new Event('input'));
+        });
+    }
+}
+
+function minutesToTimeStr(totalMinutes) {
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function abrirModalReservaDesdeDashboard() {
+    const fecha = getSelectedDateStr();
+    reservaPreset = { fecha };
+    abrirModalReserva();
+}
+
+function closeDetailPanel() {
+    const panel = document.getElementById('detail-panel');
+    if (!panel) return;
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+}
+
+function openDetailPanel({ title, subtitle, bodyHTML, actionsHTML }) {
+    const panel = document.getElementById('detail-panel');
+    if (!panel) return;
+    const t = document.getElementById('detail-title');
+    const st = document.getElementById('detail-subtitle');
+    const body = document.getElementById('detail-body');
+    const actions = document.getElementById('detail-actions');
+    if (t) t.textContent = title || 'Detalle';
+    if (st) st.textContent = subtitle || '';
+    if (body) body.innerHTML = bodyHTML || '';
+    if (actions) actions.innerHTML = actionsHTML || '';
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+}
+
+async function cancelarReservaAdmin(idReserva) {
+    const motivo = prompt('Motivo de cancelación:', 'Cancelado por operación');
+    if (motivo === null) return;
+    try {
+        await client.delete(`/reservas/${idReserva}`, { motivo });
+        showToast('Reserva cancelada', 'success');
+        closeDetailPanel();
+        await refreshDashboard();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
 
 // Sidebar dinámico
 function initSidebar(privilegios) {
-    const nav = document.getElementById('sidebar-nav');
+    let nav = document.getElementById('sidebar-nav');
+    if (!nav) {
+        const container = document.getElementById('sidebar-container');
+        if (container) {
+            const user = JSON.parse(localStorage.getItem('admin_user') || 'null');
+            container.innerHTML = `
+                <div class="sidebar-header">
+                    <img src="/imagenes/emojihospital.png" alt="Logo" style="height: 60px;">
+                    <h2>Admin GCI-UMG</h2>
+                </div>
+                <nav id="sidebar-nav"></nav>
+                <div class="sidebar-footer">
+                    <div id="user-info">
+                        <p id="user-name">${user?.nombre || 'Usuario Admin'}</p>
+                        <p id="user-role">${user?.perfil || ''}</p>
+                    </div>
+                    <button onclick="logoutAdmin()" class="btn-logout">Cerrar Sesión</button>
+                </div>
+            `;
+            nav = container.querySelector('#sidebar-nav');
+        }
+    }
     if (!nav) return;
 
     const allModules = [
-        { id: 'dashboard', label: 'Dashboard', icon: '🏠', url: 'dashboard.html' },
-        { id: 'pacientes', label: 'Pacientes', icon: '👤', url: 'pacientes.html' },
-        { id: 'medicos', label: 'Médicos', icon: '👨‍⚕️', url: 'medicos.html' },
-        { id: 'especialidades', label: 'Especialidades', icon: '🩺', url: 'especialidades.html' },
-        { id: 'quirofanos', label: 'Quirófanos', icon: '🏥', url: 'quirofanos.html' },
-        { id: 'equipos', label: 'Equipos', icon: '🛠️', url: 'equipos.html' },
-        { id: 'reservas', label: 'Reservas', icon: '📅', url: 'reservas.html' },
-        { id: 'emergencias', label: 'Emergencias', icon: '🚨', url: 'emergencias.html' },
-        { id: 'reportes', label: 'Reportes', icon: '📊', url: 'reportes.html' },
-        { id: 'usuarios', label: 'Usuarios', icon: '👥', url: 'usuarios.html' },
-        { id: 'perfiles', label: 'Perfiles', icon: '🛡️', url: 'perfiles.html' },
-        { id: 'monitoreo', label: 'Monitoreo Oracle', icon: '🖥️', url: 'monitoreo.html' }
+        { id: 'dashboard', label: 'Dashboard', icon: '•', url: 'dashboard.html' },
+        { id: 'pacientes', label: 'Pacientes', icon: '•', url: 'pacientes.html' },
+        { id: 'medicos', label: 'Médicos', icon: '•', url: 'medicos.html' },
+        { id: 'especialidades', label: 'Especialidades', icon: '•', url: 'especialidades.html' },
+        { id: 'quirofanos', label: 'Quirófanos', icon: '•', url: 'quirofanos.html' },
+        { id: 'equipos', label: 'Equipos', icon: '•', url: 'equipos.html' },
+        { id: 'reservas', label: 'Reservas', icon: '•', url: 'reservas.html' },
+        { id: 'emergencias', label: 'Emergencias', icon: '•', url: 'emergencias.html' },
+        { id: 'reportes', label: 'Reportes', icon: '•', url: 'reportes.html' },
+        { id: 'usuarios', label: 'Usuarios', icon: '•', url: 'usuarios.html' },
+        { id: 'perfiles', label: 'Perfiles', icon: '•', url: 'perfiles.html' },
+        { id: 'monitoreo', label: 'Monitoreo Oracle', icon: '•', url: 'monitoreo.html' }
     ];
 
     const privs = Array.isArray(privilegios) ? privilegios : (privilegios ? privilegios.split(',') : []);
@@ -85,44 +437,427 @@ function initSidebar(privilegios) {
         `).join('');
 }
 
+async function cargarEspecialidadesFiltro() {
+    const filtro = document.getElementById('filtro-especialidad');
+    const select = document.getElementById('id_especialidad');
+    try {
+        const especialidades = await client.get('/especialidades');
+        if (filtro) {
+            filtro.innerHTML = '<option value="">Todas las especialidades</option>' + especialidades.map(e => `
+                <option value="${e.ID_ESPECIALIDAD}">${e.NOMBRE}</option>
+            `).join('');
+        }
+        if (select) {
+            select.innerHTML = especialidades.map(e => `
+                <option value="${e.ID_ESPECIALIDAD}">${e.NOMBRE}</option>
+            `).join('');
+        }
+    } catch (err) {
+        console.error('Error al cargar especialidades:', err.message);
+    }
+}
+
 // Dashboard
 async function refreshDashboard() {
+    const statQuirofanos = document.getElementById('stat-quirofanos');
+    const statSolicitudes = document.getElementById('stat-reservas');
+    const statEmergencias = document.getElementById('stat-emergencias');
+    const statCompletadas = document.getElementById('stat-completadas');
+    const schedulerRoot = document.getElementById('scheduler-root');
+    const solicitudesBody = document.getElementById('solicitudes-body');
+    const alertasBody = document.getElementById('alertas-body');
+    const lastRefresh = document.getElementById('last-refresh');
+
+    if (!statQuirofanos && !schedulerRoot && !solicitudesBody && !alertasBody) return;
+
+    const fecha = getSelectedDateStr();
+
+    if (schedulerRoot) {
+        schedulerRoot.innerHTML = `
+            <div class="scheduler-header-grid" style="grid-template-columns: 80px repeat(4, minmax(220px, 1fr));">
+                <div class="scheduler-head-cell time">Horario</div>
+                ${Array.from({ length: 4 }).map(() => `<div class="scheduler-head-cell skeleton" style="height: 40px; margin: 8px;"></div>`).join('')}
+            </div>
+            <div class="scheduler-body-grid" style="grid-template-columns: 80px repeat(4, minmax(220px, 1fr));">
+                <div class="scheduler-times">
+                    ${Array.from({ length: 24 }).map((_, i) => `<div class="scheduler-time">${String(i).padStart(2, '0')}:00</div>`).join('')}
+                </div>
+                ${Array.from({ length: 4 }).map(() => `<div class="scheduler-col" style="height:1440px;"><div class="skeleton" style="height: 120px; margin: 10px;"></div><div class="skeleton" style="height: 160px; margin: 10px;"></div></div>`).join('')}
+            </div>
+        `;
+    }
+
     try {
-        const quirofanos = await client.get('/quirofanos/disponibles');
-        const reservas = await client.get('/reservas?estado=SOLICITADA');
-        const emergencias = await client.get('/emergencias');
-        const completadas = await client.get('/reservas?estado=COMPLETADA');
+        const [
+            quirofanosDisponibles,
+            reservasSolicitadasAll,
+            reservasCompletadas,
+            emergenciasActivas,
+            quirofanosAll,
+            reservasDia
+        ] = await Promise.all([
+            client.get('/quirofanos/disponibles'),
+            client.get(`/reservas?estado=SOLICITADA`),
+            client.get(`/reservas?estado=COMPLETADA&fecha=${encodeURIComponent(fecha)}`),
+            client.get('/emergencias'),
+            client.get('/quirofanos'),
+            client.get(`/reservas?fecha=${encodeURIComponent(fecha)}`)
+        ]);
 
-        document.getElementById('stat-quirofanos').innerText = quirofanos.length;
-        document.getElementById('stat-reservas').innerText = reservas.length;
-        document.getElementById('stat-emergencias').innerText = emergencias.length;
-        document.getElementById('stat-completadas').innerText = completadas.length;
+        const reservasSolicitadasDia = (Array.isArray(reservasSolicitadasAll) ? reservasSolicitadasAll : []).filter(r => {
+            const fr = parseDateValue(r.FECHA_RESERVA);
+            return fr && toDateStr(fr) === fecha;
+        });
 
-        // Cargar tablas rápidas
-        const ultimasRes = await client.get('/reservas');
-        document.getElementById('ultimas-reservas-body').innerHTML = ultimasRes.slice(0, 10).map(r => `
-            <tr>
-                <td>${r.PACIENTE}</td>
-                <td>${r.TIPO_CIRUGIA}</td>
-                <td>${new Date(r.FECHA_RESERVA).toLocaleDateString()}</td>
-                <td><span class="badge badge-${r.ESTADO.toLowerCase()}">${r.ESTADO}</span></td>
-                <td><a href="reservas.html" class="btn-outline">Ver</a></td>
-            </tr>
-        `).join('');
+        const emergenciasDia = (Array.isArray(emergenciasActivas) ? emergenciasActivas : []).filter(e => {
+            const d = parseDateValue(e.FECHA_HORA);
+            return d && toDateStr(d) === fecha;
+        });
 
-        document.getElementById('emergencias-activas-body').innerHTML = emergencias.map(e => `
-            <tr>
-                <td>${e.PACIENTE}</td>
-                <td>${e.QUIROFANO}</td>
-                <td><span class="badge badge-danger">${e.NIVEL_PRIORIDAD}</span></td>
-                <td>${new Date(e.FECHA_HOR).toLocaleTimeString()}</td>
-                <td><button onclick="resolverEmergencia(${e.ID_EMERGENCIA})" class="btn-primary">Resolver</button></td>
-            </tr>
-        `).join('');
+        if (statQuirofanos) statQuirofanos.textContent = Array.isArray(quirofanosDisponibles) ? quirofanosDisponibles.length : 0;
+        if (statSolicitudes) statSolicitudes.textContent = Array.isArray(reservasSolicitadasAll) ? reservasSolicitadasAll.length : 0;
+        if (statEmergencias) statEmergencias.textContent = emergenciasDia.length;
+        if (statCompletadas) statCompletadas.textContent = Array.isArray(reservasCompletadas) ? reservasCompletadas.length : 0;
 
-        document.getElementById('last-refresh').innerText = `Actualizado: ${new Date().toLocaleTimeString()}`;
+        if (schedulerRoot) {
+            renderScheduler(schedulerRoot, Array.isArray(quirofanosAll) ? quirofanosAll : [], Array.isArray(reservasDia) ? reservasDia : [], emergenciasDia, fecha);
+        }
+
+        if (solicitudesBody) {
+            solicitudesBody.innerHTML = (Array.isArray(reservasSolicitadasAll) ? reservasSolicitadasAll : []).slice(0, 50).map(r => `
+                <tr>
+                    <td>${r.ID_RESERVA}</td>
+                    <td>${r.PACIENTE}</td>
+                    <td>${r.TIPO_CIRUGIA}</td>
+                    <td>${new Date(r.FECHA_RESERVA).toLocaleDateString()}</td>
+                    <td>
+                        <button class="btn-outline" onclick="openReservaDetail(${r.ID_RESERVA})">Ver</button>
+                        <button class="btn-primary" onclick="programarDesdeSolicitud(${r.ID_RESERVA})">Programar</button>
+                    </td>
+                </tr>
+            `).join('') || '<tr><td colspan="5">No hay solicitudes pendientes.</td></tr>';
+        }
+
+        if (alertasBody) {
+            const rows = [];
+            for (const e of emergenciasDia) {
+                rows.push(`
+                    <tr>
+                        <td>EMERGENCIA</td>
+                        <td>${e.PACIENTE} · ${e.QUIROFANO} · ${e.NIVEL_PRIORIDAD}</td>
+                        <td><button class="btn-primary" onclick="resolverEmergencia(${e.ID_EMERGENCIA})">Resolver</button></td>
+                    </tr>
+                `);
+            }
+            for (const r of reservasSolicitadasDia.slice(0, 25)) {
+                rows.push(`
+                    <tr>
+                        <td>SOLICITUD</td>
+                        <td>#${r.ID_RESERVA} · ${r.PACIENTE} · ${r.TIPO_CIRUGIA}</td>
+                        <td><button class="btn-outline" onclick="openReservaDetail(${r.ID_RESERVA})">Ver</button></td>
+                    </tr>
+                `);
+            }
+            alertasBody.innerHTML = rows.join('') || '<tr><td colspan="3">Sin alertas para este día.</td></tr>';
+        }
+
+        if (lastRefresh) lastRefresh.textContent = `Actualizado: ${new Date().toLocaleTimeString()}`;
     } catch (err) {
-        console.error('Error al actualizar dashboard:', err.message);
+        showToast(err.message, 'error');
+    }
+}
+
+function parseDateValue(v) {
+    if (!v) return null;
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return null;
+    return d;
+}
+
+function toDateStr(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function minutesFromTime(d) {
+    return d.getHours() * 60 + d.getMinutes();
+}
+
+function renderScheduler(root, quirofanos, reservas, emergencias, fecha) {
+    const startMin = 0;
+    const endMin = 24 * 60;
+    const totalHeight = (endMin - startMin);
+
+    const cols = quirofanos.filter(q => q.ACTIVO === 1);
+    const colCount = cols.length || 1;
+    const gridCols = `80px repeat(${colCount}, minmax(220px, 1fr))`;
+    const minWidthPx = 80 + (colCount * 240);
+
+    const head = `
+        <div class="scheduler-inner" style="min-width:${minWidthPx}px;">
+            <div class="scheduler-header-grid" style="grid-template-columns: ${gridCols};">
+                <div class="scheduler-head-cell time">Horario</div>
+                ${cols.map(q => `
+                    <div class="scheduler-head-cell">
+                        ${q.NOMBRE}
+                        <div style="font-weight: 650; font-size: 0.78rem; color: rgba(31,41,55,0.65); margin-top: 2px;">${q.ESTADO}</div>
+                    </div>
+                `).join('')}
+            </div>
+    `;
+
+    const times = Array.from({ length: 24 }).map((_, i) => `<div class="scheduler-time">${String(i).padStart(2, '0')}:00</div>`).join('');
+
+    const reservasById = new Map();
+    reservas.forEach(r => reservasById.set(Number(r.ID_RESERVA), r));
+    window.__reservasById = reservasById;
+
+    const colsHtml = cols.map(q => {
+        const qid = Number(q.ID_QUIROFANO);
+        const blocks = [];
+
+        if (q.ESTADO === 'MANTENIMIENTO') {
+            blocks.push(`
+                <div class="sched-block sched-maint" style="top: 8px; height: ${totalHeight - 16}px;" data-kind="mantenimiento" data-qid="${qid}">
+                    <div class="sched-title">MANTENIMIENTO</div>
+                    <div class="sched-meta">${q.NOMBRE}</div>
+                </div>
+            `);
+        }
+
+        reservas
+            .filter(r => Number(r.ID_QUIROFANO) === qid)
+            .forEach(r => {
+                const hi = parseDateValue(r.HORA_INICIO);
+                const hf = parseDateValue(r.HORA_FIN);
+                const fr = parseDateValue(r.FECHA_RESERVA);
+                if (!hi || !hf || !fr) return;
+                if (toDateStr(fr) !== fecha) return;
+
+                const top = Math.max(0, minutesFromTime(hi) - startMin);
+                const height = Math.max(24, minutesFromTime(hf) - minutesFromTime(hi));
+                const estado = String(r.ESTADO || '').toUpperCase();
+
+                let cls = 'sched-pending';
+                if (estado === 'APROBADA') cls = 'sched-approved';
+                else if (estado === 'EN_CURSO') cls = 'sched-running';
+                else if (estado === 'COMPLETADA') cls = 'sched-done';
+                else if (estado === 'CANCELADA') cls = 'sched-cancelled';
+
+                blocks.push(`
+                    <div class="sched-block ${cls}" style="top:${top}px;height:${height}px;" data-kind="reserva" data-id="${r.ID_RESERVA}">
+                        <div class="sched-title">${r.TIPO_CIRUGIA || 'Reserva'}</div>
+                        <div class="sched-meta">${r.PACIENTE || ''}</div>
+                        <div class="sched-meta">${r.MEDICO || ''} · ${minutesToTimeStr(minutesFromTime(hi))}-${minutesToTimeStr(minutesFromTime(hf))}</div>
+                    </div>
+                `);
+            });
+
+        emergencias
+            .filter(e => Number(e.ID_QUIROFANO) === qid)
+            .forEach(e => {
+                const fh = parseDateValue(e.FECHA_HORA);
+                if (!fh) return;
+                if (toDateStr(fh) !== fecha) return;
+                const top = Math.max(0, minutesFromTime(fh) - startMin);
+                const height = 60;
+                blocks.push(`
+                    <div class="sched-block sched-emergency pulse" style="top:${top}px;height:${height}px;" data-kind="emergencia" data-id="${e.ID_EMERGENCIA}">
+                        <div class="sched-title">EMERGENCIA</div>
+                        <div class="sched-meta">${e.PACIENTE || ''}</div>
+                        <div class="sched-meta">${e.MEDICO || ''} · ${e.NIVEL_PRIORIDAD || ''}</div>
+                    </div>
+                `);
+            });
+
+        return `<div class="scheduler-col" data-qid="${qid}" style="height:${totalHeight}px;"></div>`;
+    }).join('');
+
+    const body = `
+            <div class="scheduler-body-grid" style="grid-template-columns: ${gridCols};">
+                <div class="scheduler-times">${times}</div>
+                ${cols.map(q => `<div class="scheduler-col" data-qid="${q.ID_QUIROFANO}" style="height:${totalHeight}px;"></div>`).join('')}
+            </div>
+        </div>
+    `;
+
+    root.innerHTML = head + body;
+
+    const colsEls = Array.from(root.querySelectorAll('.scheduler-col'));
+    colsEls.forEach(colEl => {
+        const qid = Number(colEl.dataset.qid);
+        const q = cols.find(x => Number(x.ID_QUIROFANO) === qid);
+        if (!q) return;
+
+        const fragments = [];
+        if (q.ESTADO === 'MANTENIMIENTO') {
+            fragments.push(`
+                <div class="sched-block sched-maint" style="top: 8px; height: ${totalHeight - 16}px;" data-kind="mantenimiento" data-qid="${qid}">
+                    <div class="sched-title">MANTENIMIENTO</div>
+                    <div class="sched-meta">${q.NOMBRE}</div>
+                </div>
+            `);
+        }
+
+        reservas
+            .filter(r => Number(r.ID_QUIROFANO) === qid)
+            .forEach(r => {
+                const hi = parseDateValue(r.HORA_INICIO);
+                const hf = parseDateValue(r.HORA_FIN);
+                const fr = parseDateValue(r.FECHA_RESERVA);
+                if (!hi || !hf || !fr) return;
+                if (toDateStr(fr) !== fecha) return;
+
+                const top = Math.max(0, minutesFromTime(hi) - startMin);
+                const height = Math.max(24, minutesFromTime(hf) - minutesFromTime(hi));
+                const estado = String(r.ESTADO || '').toUpperCase();
+
+                let cls = 'sched-pending';
+                if (estado === 'APROBADA') cls = 'sched-approved';
+                else if (estado === 'EN_CURSO') cls = 'sched-running';
+                else if (estado === 'COMPLETADA') cls = 'sched-done';
+                else if (estado === 'CANCELADA') cls = 'sched-cancelled';
+
+                fragments.push(`
+                    <div class="sched-block ${cls}" style="top:${top}px;height:${height}px;" data-kind="reserva" data-id="${r.ID_RESERVA}">
+                        <div class="sched-title">${r.TIPO_CIRUGIA || 'Reserva'}</div>
+                        <div class="sched-meta">${r.PACIENTE || ''}</div>
+                        <div class="sched-meta">${r.MEDICO || ''} · ${minutesToTimeStr(minutesFromTime(hi))}-${minutesToTimeStr(minutesFromTime(hf))}</div>
+                    </div>
+                `);
+            });
+
+        emergencias
+            .filter(e => Number(e.ID_QUIROFANO) === qid)
+            .forEach(e => {
+                const fh = parseDateValue(e.FECHA_HORA);
+                if (!fh) return;
+                if (toDateStr(fh) !== fecha) return;
+                const top = Math.max(0, minutesFromTime(fh) - startMin);
+                const height = 60;
+                fragments.push(`
+                    <div class="sched-block sched-emergency pulse" style="top:${top}px;height:${height}px;" data-kind="emergencia" data-id="${e.ID_EMERGENCIA}">
+                        <div class="sched-title">EMERGENCIA</div>
+                        <div class="sched-meta">${e.PACIENTE || ''}</div>
+                        <div class="sched-meta">${e.MEDICO || ''} · ${e.NIVEL_PRIORIDAD || ''}</div>
+                    </div>
+                `);
+            });
+
+        colEl.innerHTML = fragments.join('');
+
+        colEl.addEventListener('click', (ev) => {
+            const block = ev.target.closest('.sched-block');
+            if (block) return;
+            const rect = colEl.getBoundingClientRect();
+            const y = ev.clientY - rect.top;
+            const minutes = startMin + Math.max(0, Math.min(totalHeight - 1, Math.floor(y)));
+            const start = minutesToTimeStr(minutes);
+            const end = minutesToTimeStr(Math.min(endMin, minutes + 60));
+            reservaPreset = { fecha, hora_inicio: start, hora_fin: end, id_quirofano: qid };
+            abrirModalReserva();
+        });
+    });
+
+    root.querySelectorAll('.sched-block[data-kind=\"reserva\"]').forEach(el => {
+        el.addEventListener('click', () => {
+            const id = Number(el.dataset.id);
+            openReservaDetail(id);
+        });
+    });
+
+    root.querySelectorAll('.sched-block[data-kind=\"emergencia\"]').forEach(el => {
+        el.addEventListener('click', () => {
+            const id = Number(el.dataset.id);
+            openEmergenciaDetail(id);
+        });
+    });
+}
+
+function openReservaDetail(idReserva) {
+    const map = window.__reservasById;
+    const r = map ? map.get(Number(idReserva)) : null;
+    if (!r) {
+        showToast('No se encontró la reserva', 'error');
+        return;
+    }
+    const fecha = parseDateValue(r.FECHA_RESERVA);
+    const hi = parseDateValue(r.HORA_INICIO);
+    const hf = parseDateValue(r.HORA_FIN);
+    const subtitle = `${r.PACIENTE || ''} · ${r.QUIROFANO || ''}`;
+    const bodyHTML = `
+        <div style="display:flex;flex-direction:column;gap:10px;">
+            <div><strong>ID:</strong> ${r.ID_RESERVA}</div>
+            <div><strong>Estado:</strong> ${r.ESTADO}</div>
+            <div><strong>Prioridad:</strong> ${r.PRIORIDAD || ''}</div>
+            <div><strong>Cirugía:</strong> ${r.TIPO_CIRUGIA || ''}</div>
+            <div><strong>Médico:</strong> ${r.MEDICO || ''}</div>
+            <div><strong>Especialidad:</strong> ${r.ESPECIALIDAD || ''}</div>
+            <div><strong>Fecha:</strong> ${fecha ? fecha.toLocaleDateString() : ''}</div>
+            <div><strong>Hora:</strong> ${hi ? minutesToTimeStr(minutesFromTime(hi)) : ''} - ${hf ? minutesToTimeStr(minutesFromTime(hf)) : ''}</div>
+            <div><strong>Descripción:</strong> ${r.DESCRIPCION_NECESIDAD || ''}</div>
+        </div>
+    `;
+
+    let actionsHTML = `<a class="btn-outline" href="reservas.html">Abrir módulo</a>`;
+    if (String(r.ESTADO).toUpperCase() === 'SOLICITADA') {
+        actionsHTML = `
+            <button class="btn-primary" type="button" onclick="actualizarEstadoReserva(${r.ID_RESERVA}, 'APROBADA')">Aprobar</button>
+            <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
+            <a class="btn-outline" href="reservas.html">Abrir módulo</a>
+        `;
+    } else {
+        actionsHTML = `
+            <button class="btn-danger" type="button" onclick="cancelarReservaAdmin(${r.ID_RESERVA})">Cancelar</button>
+            <a class="btn-outline" href="reservas.html">Abrir módulo</a>
+        `;
+    }
+
+    openDetailPanel({
+        title: r.TIPO_CIRUGIA || 'Reserva',
+        subtitle,
+        bodyHTML,
+        actionsHTML
+    });
+}
+
+function openEmergenciaDetail(idEmergencia) {
+    showToast(`Emergencia #${idEmergencia}`, 'info');
+}
+
+async function programarDesdeSolicitud(idReserva) {
+    const map = window.__reservasById;
+    const r = map ? map.get(Number(idReserva)) : null;
+    const fecha = getSelectedDateStr();
+    if (!r) {
+        reservaPreset = { fecha };
+        abrirModalReserva();
+        return;
+    }
+    const hi = parseDateValue(r.HORA_INICIO);
+    const hf = parseDateValue(r.HORA_FIN);
+    reservaPreset = {
+        fecha,
+        hora_inicio: hi ? minutesToTimeStr(minutesFromTime(hi)) : '08:00',
+        hora_fin: hf ? minutesToTimeStr(minutesFromTime(hf)) : '09:00',
+        id_quirofano: r.ID_QUIROFANO ? Number(r.ID_QUIROFANO) : undefined
+    };
+    abrirModalReserva();
+}
+
+async function resolverEmergencia(idEmergencia) {
+    try {
+        await client.put(`/emergencias/resolver/${idEmergencia}`, {});
+        const emergenciasBody = document.getElementById('emergencias-body');
+        if (emergenciasBody) {
+            await cargarEmergencias();
+        } else {
+            await refreshDashboard();
+        }
+    } catch (err) {
+        alert(err.message);
     }
 }
 
@@ -132,6 +867,7 @@ async function cargarPacientes() {
     if (!body) return;
     try {
         const pacientes = await client.get('/pacientes');
+        pacientesCache = Array.isArray(pacientes) ? pacientes : [];
         body.innerHTML = pacientes.map(p => `
             <tr>
                 <td>${p.ID_PACIENTE}</td>
@@ -149,12 +885,121 @@ async function cargarPacientes() {
     } catch (err) { alert(err.message); }
 }
 
+function filtrarPacientes() {
+    const body = document.getElementById('pacientes-body');
+    if (!body) return;
+
+    const q = (document.getElementById('busqueda-paciente')?.value || '').toLowerCase();
+    const genero = document.getElementById('filtro-genero')?.value || '';
+
+    const filtrados = pacientesCache.filter(p => {
+        const nombre = `${p.NOMBRE || ''} ${p.APELLIDO || ''}`.toLowerCase();
+        const matchTexto = !q || nombre.includes(q);
+        const matchGenero = !genero || p.GENERO === genero;
+        return matchTexto && matchGenero;
+    });
+
+    body.innerHTML = filtrados.map(p => `
+        <tr>
+            <td>${p.ID_PACIENTE}</td>
+            <td>${p.NOMBRE} ${p.APELLIDO}</td>
+            <td>${p.EMAIL}</td>
+            <td>${p.TELEFONO || '--'}</td>
+            <td>${p.GENERO}</td>
+            <td><span class="badge badge-${p.ACTIVO ? 'success' : 'danger'}">${p.ACTIVO ? 'ACTIVO' : 'BAJA'}</span></td>
+            <td>
+                <button onclick="editarPaciente(${p.ID_PACIENTE})" class="btn-outline">Editar</button>
+                <button onclick="eliminarPaciente(${p.ID_PACIENTE})" class="btn-danger">Baja</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function abrirModalPaciente() {
+    const modal = document.getElementById('modal-paciente');
+    if (!modal) return;
+
+    document.getElementById('modal-titulo').textContent = 'Nuevo Paciente';
+    document.getElementById('id_paciente').value = '';
+    document.getElementById('nombre').value = '';
+    document.getElementById('apellido').value = '';
+    document.getElementById('email').value = '';
+    document.getElementById('fecha_nacimiento').value = '';
+    document.getElementById('genero').value = 'MASCULINO';
+    document.getElementById('telefono').value = '';
+    modal.style.display = 'block';
+
+    bindOnce('paciente-form', () => {
+        const form = document.getElementById('paciente-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('id_paciente').value;
+            const nombre = document.getElementById('nombre').value;
+            const apellido = document.getElementById('apellido').value;
+            const email = document.getElementById('email').value;
+            const fecha_nacimiento = document.getElementById('fecha_nacimiento').value;
+            const genero = document.getElementById('genero').value;
+            const telefono = document.getElementById('telefono').value;
+
+            try {
+                if (id) {
+                    await client.put(`/pacientes/${id}`, { nombre, apellido, fecha_nacimiento, genero, telefono, email });
+                } else {
+                    await client.post('/pacientes', { nombre, apellido, fecha_nacimiento, genero, telefono, email });
+                }
+                cerrarModalPaciente();
+                await cargarPacientes();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function cerrarModalPaciente() {
+    const modal = document.getElementById('modal-paciente');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+async function editarPaciente(idPaciente) {
+    const p = pacientesCache.find(x => Number(x.ID_PACIENTE) === Number(idPaciente));
+    if (!p) {
+        await cargarPacientes();
+    }
+    const paciente = pacientesCache.find(x => Number(x.ID_PACIENTE) === Number(idPaciente));
+    if (!paciente) return;
+
+    abrirModalPaciente();
+    document.getElementById('modal-titulo').textContent = 'Editar Paciente';
+    document.getElementById('id_paciente').value = paciente.ID_PACIENTE;
+    document.getElementById('nombre').value = paciente.NOMBRE || '';
+    document.getElementById('apellido').value = paciente.APELLIDO || '';
+    document.getElementById('email').value = paciente.EMAIL || '';
+    document.getElementById('fecha_nacimiento').value = paciente.FECHA_NACIMIENTO ? String(paciente.FECHA_NACIMIENTO).substring(0, 10) : '';
+    document.getElementById('genero').value = paciente.GENERO || 'MASCULINO';
+    document.getElementById('telefono').value = paciente.TELEFONO || '';
+}
+
+async function eliminarPaciente(idPaciente) {
+    const ok = confirm('¿Dar de baja este paciente?');
+    if (!ok) return;
+    try {
+        await client.delete(`/pacientes/${idPaciente}`);
+        await cargarPacientes();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
 // Gestión de Médicos
 async function cargarMedicos() {
     const body = document.getElementById('medicos-body');
     if (!body) return;
     try {
         const medicos = await client.get('/medicos');
+        medicosCache = Array.isArray(medicos) ? medicos : [];
         body.innerHTML = medicos.map(m => `
             <tr>
                 <td>${m.NOMBRE} ${m.APELLIDO}</td>
@@ -168,6 +1013,345 @@ async function cargarMedicos() {
             </tr>
         `).join('');
     } catch (err) { alert(err.message); }
+}
+
+function filtrarMedicos() {
+    const body = document.getElementById('medicos-body');
+    if (!body) return;
+
+    const q = (document.getElementById('busqueda-medico')?.value || '').toLowerCase();
+    const especialidad = document.getElementById('filtro-especialidad')?.value || '';
+
+    const filtrados = medicosCache.filter(m => {
+        const nombre = `${m.NOMBRE || ''} ${m.APELLIDO || ''}`.toLowerCase();
+        const matchTexto = !q || nombre.includes(q);
+        const matchEsp = !especialidad || String(m.ID_ESPECIALIDAD) === String(especialidad);
+        return matchTexto && matchEsp;
+    });
+
+    body.innerHTML = filtrados.map(m => `
+        <tr>
+            <td>${m.NOMBRE} ${m.APELLIDO}</td>
+            <td>${m.ESPECIALIDAD_NOMBRE}</td>
+            <td>${m.LICENCIA}</td>
+            <td>${m.EMAIL}</td>
+            <td><span class="badge badge-${m.ACTIVO ? 'success' : 'danger'}">${m.ACTIVO ? 'ACTIVO' : 'BAJA'}</span></td>
+            <td>
+                <button onclick="editarMedico(${m.ID_MEDICO})" class="btn-outline">Editar</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function abrirModalMedico() {
+    const modal = document.getElementById('modal-medico');
+    if (!modal) return;
+
+    document.getElementById('modal-titulo').textContent = 'Nuevo Médico';
+    document.getElementById('id_medico').value = '';
+    document.getElementById('nombre').value = '';
+    document.getElementById('apellido').value = '';
+    document.getElementById('licencia').value = '';
+    document.getElementById('email').value = '';
+    document.getElementById('telefono').value = '';
+    modal.style.display = 'block';
+
+    bindOnce('medico-form', () => {
+        const form = document.getElementById('medico-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('id_medico').value;
+            const nombre = document.getElementById('nombre').value;
+            const apellido = document.getElementById('apellido').value;
+            const id_especialidad = Number(document.getElementById('id_especialidad').value);
+            const licencia = document.getElementById('licencia').value;
+            const email = document.getElementById('email').value;
+            const telefono = document.getElementById('telefono').value;
+
+            try {
+                if (id) {
+                    await client.put(`/medicos/${id}`, { nombre, apellido, id_especialidad, licencia, telefono, email });
+                } else {
+                    await client.post('/medicos', { nombre, apellido, id_especialidad, licencia, telefono, email });
+                }
+                cerrarModalMedico();
+                await cargarMedicos();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function cerrarModalMedico() {
+    const modal = document.getElementById('modal-medico');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+async function editarMedico(idMedico) {
+    const m = medicosCache.find(x => Number(x.ID_MEDICO) === Number(idMedico));
+    if (!m) {
+        await cargarMedicos();
+    }
+    const medico = medicosCache.find(x => Number(x.ID_MEDICO) === Number(idMedico));
+    if (!medico) return;
+
+    abrirModalMedico();
+    document.getElementById('modal-titulo').textContent = 'Editar Médico';
+    document.getElementById('id_medico').value = medico.ID_MEDICO;
+    document.getElementById('nombre').value = medico.NOMBRE || '';
+    document.getElementById('apellido').value = medico.APELLIDO || '';
+    document.getElementById('id_especialidad').value = medico.ID_ESPECIALIDAD;
+    document.getElementById('licencia').value = medico.LICENCIA || '';
+    document.getElementById('email').value = medico.EMAIL || '';
+    document.getElementById('telefono').value = medico.TELEFONO || '';
+}
+
+async function cargarReservas() {
+    const body = document.getElementById('reservas-body');
+    if (!body) return;
+
+    const filtroEstado = document.getElementById('filtro-estado');
+    const estado = filtroEstado ? filtroEstado.value : '';
+    const endpoint = estado ? `/reservas?estado=${encodeURIComponent(estado)}` : '/reservas';
+
+    try {
+        const reservas = await client.get(endpoint);
+        reservasCache = Array.isArray(reservas) ? reservas : [];
+        body.innerHTML = reservas.map(r => `
+            <tr>
+                <td>${r.PACIENTE}</td>
+                <td>${r.TIPO_CIRUGIA}</td>
+                <td>${r.MEDICO}</td>
+                <td>${r.QUIROFANO}</td>
+                <td>${new Date(r.FECHA_RESERVA).toLocaleDateString()}</td>
+                <td><span class="badge badge-${r.ESTADO.toLowerCase()}">${r.ESTADO}</span></td>
+                <td>${r.ESTADO === 'SOLICITADA' ? `<button onclick="actualizarEstadoReserva(${r.ID_RESERVA}, 'APROBADA')" class="btn-primary">Aprobar</button>` : ''}</td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="7">Error al cargar reservas.</td></tr>';
+    }
+}
+
+async function abrirModalReserva() {
+    const modal = document.getElementById('modal-reserva');
+    if (!modal) return;
+    const preset = reservaPreset;
+
+    document.getElementById('modal-titulo').textContent = 'Nueva Reserva';
+    document.getElementById('id_reserva').value = '';
+    document.getElementById('tipo_cirugia').value = '';
+    document.getElementById('descripcion').value = '';
+    const prioridadEl = document.getElementById('prioridad');
+    if (prioridadEl) prioridadEl.value = 'NORMAL';
+    document.getElementById('fecha').value = preset?.fecha || '';
+    document.getElementById('hora_inicio').value = preset?.hora_inicio || '';
+    document.getElementById('hora_fin').value = preset?.hora_fin || '';
+    modal.style.display = 'block';
+
+    bindOnce('reserva-form-init', async () => {
+        const [pacientes, medicos, quirofanos, especialidades] = await Promise.all([
+            client.get('/pacientes'),
+            client.get('/medicos'),
+            client.get('/quirofanos/disponibles'),
+            client.get('/especialidades')
+        ]);
+
+        const selPaciente = document.getElementById('id_paciente');
+        const selMedico = document.getElementById('id_medico');
+        const selQuirofano = document.getElementById('id_quirofano');
+        const selEspecialidad = document.getElementById('id_especialidad');
+
+        if (selPaciente) selPaciente.innerHTML = pacientes.map(p => `<option value="${p.ID_PACIENTE}">${p.NOMBRE} ${p.APELLIDO}</option>`).join('');
+        if (selMedico) selMedico.innerHTML = medicos.map(m => `<option value="${m.ID_MEDICO}">${m.NOMBRE} ${m.APELLIDO}</option>`).join('');
+        if (selQuirofano) selQuirofano.innerHTML = quirofanos.map(q => `<option value="${q.ID_QUIROFANO}">${q.NOMBRE}</option>`).join('');
+        if (selEspecialidad) selEspecialidad.innerHTML = especialidades.map(e => `<option value="${e.ID_ESPECIALIDAD}">${e.NOMBRE}</option>`).join('');
+
+        if (preset?.id_paciente && selPaciente) selPaciente.value = String(preset.id_paciente);
+        if (preset?.id_medico && selMedico) selMedico.value = String(preset.id_medico);
+        if (preset?.id_quirofano && selQuirofano) selQuirofano.value = String(preset.id_quirofano);
+        if (preset?.id_especialidad && selEspecialidad) selEspecialidad.value = String(preset.id_especialidad);
+        if (preset?.prioridad && prioridadEl) prioridadEl.value = preset.prioridad;
+        reservaPreset = null;
+    });
+
+    bindOnce('reserva-form', () => {
+        const form = document.getElementById('reserva-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id_paciente = Number(document.getElementById('id_paciente').value);
+            const id_medico = Number(document.getElementById('id_medico').value);
+            const id_quirofano = Number(document.getElementById('id_quirofano').value);
+            const id_especialidad = Number(document.getElementById('id_especialidad').value);
+            const tipo_cirugia = document.getElementById('tipo_cirugia').value;
+            const descripcion = document.getElementById('descripcion').value;
+            const prioridad = document.getElementById('prioridad')?.value || 'NORMAL';
+            const fecha = document.getElementById('fecha').value;
+            const hora_inicio = document.getElementById('hora_inicio').value;
+            const hora_fin = document.getElementById('hora_fin').value;
+
+            try {
+                await client.post('/reservas', { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, prioridad, fecha, hora_inicio, hora_fin });
+                cerrarModalReserva();
+                showToast('Reserva guardada', 'success');
+                const body = document.getElementById('reservas-body');
+                if (body) {
+                    await cargarReservas();
+                } else {
+                    await refreshDashboard();
+                }
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    });
+}
+
+function cerrarModalReserva() {
+    const modal = document.getElementById('modal-reserva');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+async function actualizarEstadoReserva(idReserva, estado) {
+    try {
+        await client.put(`/reservas/estado/${idReserva}`, { estado });
+        const body = document.getElementById('reservas-body');
+        if (body) {
+            await cargarReservas();
+        } else {
+            await refreshDashboard();
+        }
+        showToast('Estado actualizado', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function cargarUsuarios() {
+    const body = document.getElementById('usuarios-body');
+    const selectPerfil = document.getElementById('id_perfil');
+    if (!body && !selectPerfil) return;
+
+    try {
+        const [usuarios, perfiles] = await Promise.all([
+            body ? client.get('/usuarios') : Promise.resolve([]),
+            selectPerfil ? client.get('/perfiles') : Promise.resolve([])
+        ]);
+
+        if (selectPerfil) {
+            selectPerfil.innerHTML = perfiles.map(p => `
+                <option value="${p.ID_PERFIL}">${p.NOMBRE}</option>
+            `).join('');
+        }
+
+        if (body) {
+            body.innerHTML = usuarios.map(u => `
+                <tr>
+                    <td>${u.NOMBRE} ${u.APELLIDO}</td>
+                    <td>${u.USERNAME}</td>
+                    <td>${u.EMAIL}</td>
+                    <td>${u.PERFIL_NOMBRE || '--'}</td>
+                    <td><span class="badge badge-${u.ACTIVO ? 'success' : 'danger'}">${u.ACTIVO ? 'ACTIVO' : 'BAJA'}</span></td>
+                    <td>
+                        <button onclick="toggleUsuario(${u.ID_USUARIO}, ${u.ACTIVO ? 0 : 1})" class="btn-outline">${u.ACTIVO ? 'Desactivar' : 'Activar'}</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (err) {
+        if (body) body.innerHTML = '<tr><td colspan="6">Error al cargar usuarios.</td></tr>';
+    }
+}
+
+async function toggleUsuario(idUsuario, activo) {
+    try {
+        await client.put(`/usuarios/estado/${idUsuario}`, { activo });
+        await cargarUsuarios();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function cargarPerfiles() {
+    const body = document.getElementById('perfiles-body');
+    if (!body) return;
+
+    try {
+        const perfiles = await client.get('/perfiles');
+        perfilesCache = Array.isArray(perfiles) ? perfiles : [];
+        body.innerHTML = perfiles.map(p => `
+            <tr>
+                <td>${p.NOMBRE}</td>
+                <td>${p.DESCRIPCION || ''}</td>
+                <td>${p.PRIVILEGIOS || ''}</td>
+                <td><span class="badge badge-${p.ACTIVO ? 'success' : 'danger'}">${p.ACTIVO ? 'ACTIVO' : 'BAJA'}</span></td>
+                <td>
+                    <button class="btn-outline" onclick="editarPerfil(${p.ID_PERFIL})">Editar</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="5">Error al cargar perfiles.</td></tr>';
+    }
+}
+
+function abrirModalPerfil() {
+    const modal = document.getElementById('modal-perfil');
+    if (!modal) return;
+
+    document.getElementById('modal-titulo').textContent = 'Nuevo Perfil';
+    document.getElementById('id_perfil').value = '';
+    document.getElementById('nombre').value = '';
+    document.getElementById('descripcion').value = '';
+    document.querySelectorAll('input[name="privilegios"]').forEach(cb => { cb.checked = false; });
+    modal.style.display = 'block';
+
+    bindOnce('perfil-form', () => {
+        const form = document.getElementById('perfil-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('id_perfil').value;
+            const nombre = document.getElementById('nombre').value;
+            const descripcion = document.getElementById('descripcion').value;
+            const privilegios = Array.from(document.querySelectorAll('input[name="privilegios"]:checked')).map(x => x.value).join(',');
+
+            try {
+                if (id) {
+                    await client.put(`/perfiles/${id}`, { nombre, descripcion, privilegios });
+                } else {
+                    await client.post('/perfiles', { nombre, descripcion, privilegios });
+                }
+                cerrarModalPerfil();
+                await cargarPerfiles();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function editarPerfil(idPerfil) {
+    const perfil = perfilesCache.find(p => Number(p.ID_PERFIL) === Number(idPerfil));
+    if (!perfil) return;
+    abrirModalPerfil();
+    document.getElementById('modal-titulo').textContent = 'Editar Perfil';
+    document.getElementById('id_perfil').value = perfil.ID_PERFIL;
+    document.getElementById('nombre').value = perfil.NOMBRE || '';
+    document.getElementById('descripcion').value = perfil.DESCRIPCION || '';
+    const selected = String(perfil.PRIVILEGIOS || '').split(',').map(s => s.trim()).filter(Boolean);
+    document.querySelectorAll('input[name="privilegios"]').forEach(cb => { cb.checked = selected.includes(cb.value); });
+}
+
+function cerrarModalPerfil() {
+    const modal = document.getElementById('modal-perfil');
+    if (!modal) return;
+    modal.style.display = 'none';
 }
 
 // Gestión de Quirófanos
@@ -191,24 +1375,496 @@ async function cargarQuirofanos() {
     } catch (err) { console.error(err.message); }
 }
 
+let handlersBound = {};
+
+function bindOnce(key, fn) {
+    if (handlersBound[key]) return;
+    handlersBound[key] = true;
+    fn();
+}
+
+async function cargarEspecialidades() {
+    const body = document.getElementById('especialidades-body');
+    if (!body) return;
+
+    try {
+        const especialidades = await client.get('/especialidades');
+        especialidadesCache = Array.isArray(especialidades) ? especialidades : [];
+        body.innerHTML = especialidades.map(e => `
+            <tr>
+                <td>${e.NOMBRE}</td>
+                <td>${e.DESCRIPCION || ''}</td>
+                <td><span class="badge badge-success">ACTIVA</span></td>
+                <td>
+                    <button class="btn-outline" onclick="editarEspecialidad(${e.ID_ESPECIALIDAD})">Editar</button>
+                    <button class="btn-danger" onclick="darBajaEspecialidad(${e.ID_ESPECIALIDAD})">Baja</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="4">Error al cargar especialidades.</td></tr>';
+    }
+}
+
+function abrirModalEspecialidad() {
+    const modal = document.getElementById('modal-especialidad');
+    if (!modal) return;
+    document.getElementById('modal-titulo').textContent = 'Nueva Especialidad';
+    document.getElementById('id_especialidad').value = '';
+    document.getElementById('nombre').value = '';
+    document.getElementById('descripcion').value = '';
+    modal.style.display = 'block';
+
+    bindOnce('especialidad-form', () => {
+        const form = document.getElementById('especialidad-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('id_especialidad').value;
+            const nombre = document.getElementById('nombre').value;
+            const descripcion = document.getElementById('descripcion').value;
+
+            try {
+                if (id) {
+                    await client.put(`/especialidades/${id}`, { nombre, descripcion });
+                } else {
+                    await client.post('/especialidades', { nombre, descripcion });
+                }
+                cerrarModalEspecialidad();
+                await cargarEspecialidades();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function editarEspecialidad(id) {
+    const esp = especialidadesCache.find(e => Number(e.ID_ESPECIALIDAD) === Number(id));
+    abrirModalEspecialidad();
+    document.getElementById('modal-titulo').textContent = 'Editar Especialidad';
+    document.getElementById('id_especialidad').value = id;
+    document.getElementById('nombre').value = esp?.NOMBRE || '';
+    document.getElementById('descripcion').value = esp?.DESCRIPCION || '';
+}
+
+async function darBajaEspecialidad(id) {
+    const ok = confirm('¿Dar de baja esta especialidad?');
+    if (!ok) return;
+    try {
+        await client.put(`/especialidades/baja/${id}`, {});
+        await cargarEspecialidades();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+function cerrarModalEspecialidad() {
+    const modal = document.getElementById('modal-especialidad');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+function cambiarEstadoQ(idQuirofano, estadoActual) {
+    const modal = document.getElementById('modal-quirofano');
+    if (!modal) return;
+    document.getElementById('id_quirofano').value = idQuirofano;
+    document.getElementById('estado').value = estadoActual;
+    const nombreEl = document.getElementById('quirofano-nombre');
+    if (nombreEl) nombreEl.textContent = `Quirófano #${idQuirofano}`;
+    modal.style.display = 'block';
+
+    bindOnce('quirofano-form', () => {
+        const form = document.getElementById('quirofano-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('id_quirofano').value;
+            const estado = document.getElementById('estado').value;
+            try {
+                await client.put(`/quirofanos/estado/${id}`, { estado });
+                cerrarModalQuirofano();
+                await cargarQuirofanos();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function cerrarModalQuirofano() {
+    const modal = document.getElementById('modal-quirofano');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+async function cargarEquipos() {
+    const body = document.getElementById('equipos-body');
+    if (!body) return;
+
+    try {
+        const equipos = await client.get('/equipos');
+        equiposCache = Array.isArray(equipos) ? equipos : [];
+        body.innerHTML = equipos.map(e => `
+            <tr>
+                <td>${e.NOMBRE}</td>
+                <td>${e.DESCRIPCION || ''}</td>
+                <td>${e.CANTIDAD_TOTAL}</td>
+                <td>${e.CANTIDAD_DISPONIBLE}</td>
+                <td><span class="badge badge-success">ACTIVO</span></td>
+                <td>
+                    <button class="btn-outline" onclick="editarEquipo(${e.ID_EQUIPO})">Editar</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="6">Error al cargar equipos.</td></tr>';
+    }
+}
+
+function abrirModalEquipo() {
+    const modal = document.getElementById('modal-equipo');
+    if (!modal) return;
+    document.getElementById('modal-titulo').textContent = 'Nuevo Equipo';
+    document.getElementById('id_equipo').value = '';
+    document.getElementById('nombre').value = '';
+    document.getElementById('descripcion').value = '';
+    document.getElementById('cantidad_total').value = 1;
+    document.getElementById('cantidad_disponible').value = 1;
+    modal.style.display = 'block';
+
+    bindOnce('equipo-form', () => {
+        const form = document.getElementById('equipo-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('id_equipo').value;
+            const nombre = document.getElementById('nombre').value;
+            const descripcion = document.getElementById('descripcion').value;
+            const cantidad_total = Number(document.getElementById('cantidad_total').value);
+            const cantidad_disponible = Number(document.getElementById('cantidad_disponible').value);
+
+            try {
+                if (id) {
+                    await client.put(`/equipos/stock/${id}`, { cantidad_total, cantidad_disponible });
+                } else {
+                    await client.post('/equipos', { nombre, descripcion, cantidad_total });
+                }
+                cerrarModalEquipo();
+                await cargarEquipos();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function editarEquipo(id) {
+    const eq = equiposCache.find(e => Number(e.ID_EQUIPO) === Number(id));
+    abrirModalEquipo();
+    document.getElementById('modal-titulo').textContent = 'Editar Equipo';
+    document.getElementById('id_equipo').value = id;
+    document.getElementById('nombre').value = eq?.NOMBRE || '';
+    document.getElementById('descripcion').value = eq?.DESCRIPCION || '';
+    document.getElementById('cantidad_total').value = eq?.CANTIDAD_TOTAL ?? 1;
+    document.getElementById('cantidad_disponible').value = eq?.CANTIDAD_DISPONIBLE ?? 1;
+}
+
+function cerrarModalEquipo() {
+    const modal = document.getElementById('modal-equipo');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+async function cargarEmergencias() {
+    const body = document.getElementById('emergencias-body');
+    if (!body) return;
+
+    try {
+        const emergencias = await client.get('/emergencias');
+        if (!Array.isArray(emergencias) || emergencias.length === 0) {
+            body.innerHTML = '<tr><td colspan="6">No hay emergencias activas.</td></tr>';
+            return;
+        }
+        body.innerHTML = emergencias.map(e => `
+            <tr>
+                <td>${e.PACIENTE}</td>
+                <td>${e.QUIROFANO}</td>
+                <td><span class="badge badge-danger">${e.NIVEL}</span></td>
+                <td>${e.MEDICO}</td>
+                <td>${new Date(e.FECHA_HORA).toLocaleString()}</td>
+                <td><button class="btn-outline" onclick="resolverEmergencia(${e.ID_EMERGENCIA})">Resolver</button></td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="6">Error al cargar emergencias.</td></tr>';
+    }
+}
+
+function abrirModalEmergencia() {
+    const modal = document.getElementById('modal-emergencia');
+    if (!modal) return;
+    modal.style.display = 'block';
+
+    bindOnce('emergencia-form-init', async () => {
+        const [pacientes, medicos, quirofanos] = await Promise.all([
+            client.get('/pacientes'),
+            client.get('/medicos'),
+            client.get('/quirofanos/disponibles')
+        ]);
+
+        const selPaciente = document.getElementById('id_paciente_emerg');
+        const selMedico = document.getElementById('id_medico_emerg');
+        const selQuirofano = document.getElementById('id_quirofano_emerg');
+
+        if (selPaciente) {
+            selPaciente.innerHTML = pacientes.map(p => `<option value="${p.ID_PACIENTE}">${p.NOMBRE} ${p.APELLIDO}</option>`).join('');
+        }
+        if (selMedico) {
+            selMedico.innerHTML = medicos.map(m => `<option value="${m.ID_MEDICO}">${m.NOMBRE} ${m.APELLIDO}</option>`).join('');
+        }
+        if (selQuirofano) {
+            selQuirofano.innerHTML = quirofanos.map(q => `<option value="${q.ID_QUIROFANO}">${q.NOMBRE}</option>`).join('');
+        }
+    });
+
+    bindOnce('emergencia-form', () => {
+        const form = document.getElementById('emergencia-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id_paciente = Number(document.getElementById('id_paciente_emerg').value);
+            const id_medico = Number(document.getElementById('id_medico_emerg').value);
+            const id_quirofano = Number(document.getElementById('id_quirofano_emerg').value);
+            const nivel = document.getElementById('nivel').value;
+            const descripcion = document.getElementById('descripcion').value;
+
+            try {
+                await client.post('/emergencias', { id_paciente, id_medico, id_quirofano, nivel, descripcion });
+                cerrarModalEmergencia();
+                await cargarEmergencias();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function cerrarModalEmergencia() {
+    const modal = document.getElementById('modal-emergencia');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+function abrirModalUsuario() {
+    const modal = document.getElementById('modal-usuario');
+    if (!modal) return;
+    document.getElementById('modal-titulo').textContent = 'Nuevo Usuario';
+    document.getElementById('id_usuario').value = '';
+    document.getElementById('nombre').value = '';
+    document.getElementById('apellido').value = '';
+    document.getElementById('username').value = '';
+    document.getElementById('email').value = '';
+    document.getElementById('password').value = '';
+    const passGroup = document.getElementById('pass-group');
+    if (passGroup) passGroup.style.display = 'block';
+    modal.style.display = 'block';
+
+    bindOnce('usuario-form-init', async () => {
+        const perfiles = await client.get('/perfiles');
+        const selectPerfil = document.getElementById('id_perfil');
+        if (selectPerfil) {
+            selectPerfil.innerHTML = perfiles.map(p => `<option value="${p.ID_PERFIL}">${p.NOMBRE}</option>`).join('');
+        }
+    });
+
+    bindOnce('usuario-form', () => {
+        const form = document.getElementById('usuario-form');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('id_usuario').value;
+            const nombre = document.getElementById('nombre').value;
+            const apellido = document.getElementById('apellido').value;
+            const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const id_perfil = Number(document.getElementById('id_perfil').value);
+
+            try {
+                if (id) {
+                    await client.put(`/usuarios/${id}`, { nombre, apellido, email, id_perfil });
+                } else {
+                    await client.post('/usuarios', { nombre, apellido, username, email, password, id_perfil });
+                }
+                cerrarModalUsuario();
+                await cargarUsuarios();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function cerrarModalUsuario() {
+    const modal = document.getElementById('modal-usuario');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
 // Monitoreo Oracle
 async function cargarMonitoreo() {
+    const lastEl = document.getElementById('mon-last');
+    const kSes = document.getElementById('mon-kpi-sesiones');
+    const kAct = document.getElementById('mon-kpi-activas');
+    const kBloq = document.getElementById('mon-kpi-bloqueadas');
+    const kLocks = document.getElementById('mon-kpi-bloqueos');
+    const sysEl = document.getElementById('mon-sysmetrics');
+    const topWaitEl = document.getElementById('mon-top-wait');
+
+    const sesionesBody = document.getElementById('mon-sesiones-body');
+    const bloqueosBody = document.getElementById('mon-bloqueos-body');
+    const waitsBody = document.getElementById('mon-waits-body');
+    const topSqlBody = document.getElementById('mon-top-sql-body');
+    const txBody = document.getElementById('mon-tx-body');
+
+    if (!kSes && !sesionesBody && !bloqueosBody && !topSqlBody) return;
+
+    function fmt(n) {
+        if (n === null || n === undefined) return '--';
+        const num = Number(n);
+        if (Number.isNaN(num)) return String(n);
+        if (Math.abs(num) >= 1000) return num.toLocaleString();
+        return num % 1 === 0 ? String(num) : num.toFixed(2);
+    }
+
     try {
-        const sesiones = await client.get('/monitoreo/sesiones');
-        document.getElementById('mon-sesiones-body').innerHTML = sesiones.map(s => `
-            <tr><td>${s.SID}</td><td>${s.USERNAME}</td><td>${s.STATUS}</td><td>${s.MACHINE}</td><td>${s.EVENT}</td></tr>
-        `).join('');
+        const [overview, sesiones, bloqueos, waits, topSql, tx] = await Promise.all([
+            client.get('/monitoreo/overview'),
+            client.get('/monitoreo/sesiones'),
+            client.get('/monitoreo/bloqueos'),
+            client.get('/monitoreo/waits'),
+            client.get('/monitoreo/top-sql'),
+            client.get('/monitoreo/transacciones')
+        ]);
 
-        const bloqueos = await client.get('/monitoreo/bloqueos');
-        document.getElementById('mon-bloqueos-body').innerHTML = bloqueos.map(b => `
-            <tr><td>${b.SID}</td><td>${b.USERNAME}</td><td>${b.TYPE}</td><td>${b.LMODE}</td><td>${b.REQUEST}</td><td>${b.BLOCK ? 'SÍ' : 'NO'}</td></tr>
-        `).join('');
+        pushMonPoint({
+            ts: Date.now(),
+            sesiones: overview.sesiones,
+            activas: overview.sesiones_activas
+        });
+        upsertWaitsByClass(waits);
 
-        const sql = await client.get('/monitoreo/top-sql');
-        document.getElementById('mon-top-sql-body').innerHTML = sql.map(s => `
-            <tr><td>${s.SQL_TEXT.substring(0, 50)}...</td><td>${s.ELAPSED_TIME}</td><td>${s.EXECUTIONS}</td><td>${s.ROWS_PROCESSED}</td></tr>
-        `).join('');
-    } catch (err) { console.error(err.message); }
+        if (kSes) kSes.textContent = fmt(overview.sesiones);
+        if (kAct) kAct.textContent = fmt(overview.sesiones_activas);
+        if (kBloq) kBloq.textContent = fmt(overview.sesiones_bloqueadas);
+        if (kLocks) kLocks.textContent = fmt(overview.bloqueos);
+
+        if (topWaitEl) {
+            topWaitEl.textContent = overview.top_wait
+                ? `${overview.top_wait.wait_class} · ${overview.top_wait.event} · ${overview.top_wait.cnt}`
+                : 'Sin waits relevantes';
+        }
+
+        if (sysEl) {
+            const items = Array.isArray(overview.sysmetrics) ? overview.sysmetrics : [];
+            sysEl.innerHTML = items.map(m => `
+                <div class="sysmetric">
+                    <div class="label">${m.METRIC_NAME}</div>
+                    <div class="value">${fmt(m.VALUE)} ${m.UNIT || ''}</div>
+                </div>
+            `).join('');
+        }
+
+        if (sesionesBody) {
+            const rows = Array.isArray(sesiones) ? sesiones : [];
+            sesionesBody.innerHTML = rows.slice(0, 200).map(s => `
+                <tr>
+                    <td>${s.SID}</td>
+                    <td>${s.USERNAME}</td>
+                    <td>${s.STATUS}</td>
+                    <td>${s.MACHINE || ''}</td>
+                    <td>${s.PROGRAM || ''}</td>
+                    <td>${s.WAIT_CLASS || ''}</td>
+                    <td>${s.EVENT || ''}</td>
+                    <td>${s.BLOCKING_SESSION || ''}</td>
+                    <td>${s.SQL_ID || ''}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="9">Sin datos</td></tr>';
+        }
+
+        if (bloqueosBody) {
+            const rows = Array.isArray(bloqueos) ? bloqueos : [];
+            bloqueosBody.innerHTML = rows.slice(0, 200).map(b => `
+                <tr>
+                    <td>${b.SID}</td>
+                    <td>${b.USERNAME}</td>
+                    <td>${b.TYPE}</td>
+                    <td>${b.LMODE}</td>
+                    <td>${b.REQUEST}</td>
+                    <td>${b.BLOCK ? 'SÍ' : 'NO'}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="6">Sin bloqueos</td></tr>';
+        }
+
+        if (waitsBody) {
+            const rows = Array.isArray(waits) ? waits : [];
+            waitsBody.innerHTML = rows.map(w => `
+                <tr>
+                    <td>${w.WAIT_CLASS}</td>
+                    <td>${w.EVENT}</td>
+                    <td>${w.CNT}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="3">Sin waits</td></tr>';
+        }
+
+        if (topSqlBody) {
+            const rows = Array.isArray(topSql) ? topSql : [];
+            topSqlBody.innerHTML = rows.map(s => `
+                <tr>
+                    <td>${s.SQL_ID || ''}</td>
+                    <td>${s.PARSING_SCHEMA_NAME || ''}</td>
+                    <td>${fmt(s.ELAPSED_TIME)}</td>
+                    <td>${fmt(s.CPU_TIME)}</td>
+                    <td>${fmt(s.EXECUTIONS)}</td>
+                    <td>${fmt(s.ROWS_PROCESSED)}</td>
+                    <td>${String(s.SQL_TEXT || '').substring(0, 90)}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="7">Sin datos</td></tr>';
+        }
+
+        if (txBody) {
+            const rows = Array.isArray(tx) ? tx : [];
+            txBody.innerHTML = rows.slice(0, 200).map(t => `
+                <tr>
+                    <td>${t.START_TIME ? new Date(t.START_TIME).toLocaleString() : ''}</td>
+                    <td>${t.STATUS}</td>
+                    <td>${t.SID || ''}</td>
+                    <td>${t.USERNAME || ''}</td>
+                    <td>${t.MACHINE || ''}</td>
+                    <td>${t.PROGRAM || ''}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="6">Sin transacciones activas</td></tr>';
+        }
+
+        if (lastEl) lastEl.textContent = `Actualizado: ${new Date().toLocaleTimeString()}`;
+
+        const chartSes = document.getElementById('chart-sesiones');
+        const chartWaits = document.getElementById('chart-waits');
+        if (chartSes) {
+            const labels = monSeries.ts.map(t => new Date(t).toLocaleTimeString());
+            drawLineChart('chart-sesiones', monSeries.sesiones, monSeries.activas, labels);
+        }
+        if (chartWaits) {
+            const entries = Object.entries(monSeries.waitsByClass || {})
+                .map(([k, v]) => ({ label: k.length > 10 ? k.slice(0, 10) + '…' : k, fullLabel: k, value: Number(v || 0) }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 8);
+            drawBarChart('chart-waits', entries);
+        }
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 }
 
 // Reportes
@@ -235,7 +1891,7 @@ async function cargarReportes() {
 function logoutAdmin() {
     localStorage.removeItem('admin_token');
     localStorage.removeItem('admin_user');
-    window.location.href = 'login.html';
+    window.location.href = 'index.html';
 }
 
 function exportarCSV() {

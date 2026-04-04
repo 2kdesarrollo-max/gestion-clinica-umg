@@ -4,6 +4,15 @@ const oracledb = require('oracledb');
 const { getConnection } = require('../config/db');
 const { verificarToken } = require('../middleware/auth');
 
+function obtenerActor(usuario) {
+  if (!usuario) return 'sistema';
+  if (usuario.username) return usuario.username;
+  if (usuario.tipo && usuario.id) return `${usuario.tipo}_${usuario.id}`;
+  if (usuario.nombre) return usuario.nombre;
+  if (usuario.id) return `USR_${usuario.id}`;
+  return 'sistema';
+}
+
 // Obtener todas las reservas con filtros
 router.get('/', verificarToken, async (req, res) => {
   let conn;
@@ -24,6 +33,10 @@ router.get('/', verificarToken, async (req, res) => {
     if (req.query.estado) {
       sql += ` AND r.estado = :estado`;
       params.estado = req.query.estado;
+    }
+    if (req.query.fecha) {
+      sql += ` AND TRUNC(r.fecha_reserva) = TO_DATE(:fecha, 'YYYY-MM-DD')`;
+      params.fecha = req.query.fecha;
     }
     sql += ` ORDER BY r.fecha_reserva DESC, r.hora_inicio DESC`;
     const result = await conn.execute(sql, params);
@@ -58,7 +71,7 @@ router.get('/paciente/:id', verificarToken, async (req, res) => {
 
 // Crear reserva (llama SP_RESERVAR_QUIROFANO)
 router.post('/', verificarToken, async (req, res) => {
-  const { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, fecha, hora_inicio, hora_fin } = req.body;
+  const { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, fecha, hora_inicio, hora_fin, prioridad } = req.body;
   let conn;
   try {
     conn = await getConnection();
@@ -68,13 +81,14 @@ router.post('/', verificarToken, async (req, res) => {
            :id_paciente, :id_medico, :id_quirofano, :id_especialidad, 
            :tipo_cirugia, :descripcion, TO_DATE(:fecha, 'YYYY-MM-DD'), 
            TO_DATE(:inicio, 'YYYY-MM-DD HH24:MI'), TO_DATE(:fin, 'YYYY-MM-DD HH24:MI'), 
-           :creado_por, :id_reserva
+           :prioridad, :creado_por, :id_reserva
          ); 
        END;`,
       {
         id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion,
         fecha, inicio: `${fecha} ${hora_inicio}`, fin: `${fecha} ${hora_fin}`,
-        creado_por: req.usuario.username,
+        prioridad: prioridad || 'NORMAL',
+        creado_por: obtenerActor(req.usuario),
         id_reserva: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
       }
     );
@@ -99,6 +113,11 @@ router.put('/estado/:id', verificarToken, async (req, res) => {
     await conn.commit();
     res.json({ mensaje: 'Estado de reserva actualizado' });
   } catch (err) {
+    if (String(err.message || '').includes('ORA-20001')) {
+      return res.status(409).json({
+        error: 'Conflicto: el quirófano ya tiene una reserva en ese horario. Reprograma o asigna otro quirófano.'
+      });
+    }
     res.status(500).json({ error: err.message });
   } finally {
     if (conn) await conn.close();
@@ -122,7 +141,7 @@ router.put('/reprogramar/:id', verificarToken, async (req, res) => {
       {
         id: req.params.id, fecha: fecha_nueva,
         inicio: `${fecha_nueva} ${hora_inicio_nueva}`, fin: `${fecha_nueva} ${hora_fin_nueva}`,
-        justificacion, reprogramado_por: req.usuario.username
+        justificacion, reprogramado_por: obtenerActor(req.usuario)
       }
     );
     res.json({ mensaje: 'Reserva reprogramada exitosamente' });
@@ -141,7 +160,7 @@ router.delete('/:id', verificarToken, async (req, res) => {
     conn = await getConnection();
     await conn.execute(
       `BEGIN SP_CANCELAR_RESERVA(:id, :motivo, :cancelado_por); END;`,
-      { id: req.params.id, motivo: motivo || 'Cancelado por usuario', cancelado_por: req.usuario.username }
+      { id: req.params.id, motivo: motivo || 'Cancelado por usuario', cancelado_por: obtenerActor(req.usuario) }
     );
     res.json({ mensaje: 'Reserva cancelada' });
   } catch (err) {

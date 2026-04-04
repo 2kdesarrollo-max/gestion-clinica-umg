@@ -3,6 +3,7 @@
    ============================================================ */
 
 const API_URL = '/api';
+let reservasCache = [];
 
 // Función fetch genérica
 async function apiFetch(endpoint, options = {}) {
@@ -47,7 +48,7 @@ if (loginForm) {
             });
             localStorage.setItem('token_paciente', data.token);
             localStorage.setItem('paciente', JSON.stringify(data.paciente));
-            window.location.href = 'index.html';
+            window.location.href = 'mis-reservas.html';
         } catch (err) {
             alert(err.message);
         }
@@ -142,6 +143,7 @@ async function cargarMisReservas() {
     const paciente = JSON.parse(localStorage.getItem('paciente'));
     try {
         const reservas = await apiFetch(`/reservas/paciente/${paciente.id}`);
+        reservasCache = Array.isArray(reservas) ? reservas : [];
         if (reservas.length === 0) {
             body.innerHTML = '<tr><td colspan="5">No tienes reservas registradas.</td></tr>';
             return;
@@ -160,6 +162,53 @@ async function cargarMisReservas() {
         `).join('');
     } catch (err) {
         body.innerHTML = '<tr><td colspan="5">Error al cargar reservas.</td></tr>';
+    }
+}
+
+function verDetalle(idReserva) {
+    const modal = document.getElementById('modal-detalle');
+    const detalle = document.getElementById('detalle-reserva');
+    if (!modal || !detalle) return;
+
+    const reserva = reservasCache.find(r => Number(r.ID_RESERVA) === Number(idReserva));
+
+    if (!reserva) {
+        detalle.innerHTML = '<p>No se encontró la reserva.</p>';
+        modal.style.display = 'block';
+        return;
+    }
+
+    detalle.innerHTML = `
+        <p><strong>ID:</strong> ${reserva.ID_RESERVA}</p>
+        <p><strong>Fecha:</strong> ${new Date(reserva.FECHA_RESERVA).toLocaleDateString()}</p>
+        <p><strong>Cirugía:</strong> ${reserva.TIPO_CIRUGIA}</p>
+        <p><strong>Estado:</strong> ${reserva.ESTADO}</p>
+        <p><strong>Médico:</strong> ${reserva.MEDICO || 'Pendiente'}</p>
+        <p><strong>Quirófano:</strong> ${reserva.QUIROFANO || 'Pendiente'}</p>
+        <p><strong>Descripción:</strong> ${reserva.DESCRIPCION_NECESIDAD || '-'}</p>
+    `;
+
+    modal.style.display = 'block';
+}
+
+function closeModal() {
+    const modal = document.getElementById('modal-detalle');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+async function cancelarReserva(idReserva) {
+    const ok = confirm('¿Deseas cancelar esta reserva?');
+    if (!ok) return;
+
+    try {
+        await apiFetch(`/reservas/${idReserva}`, {
+            method: 'DELETE',
+            body: JSON.stringify({ motivo: 'Cancelado por paciente' })
+        });
+        await cargarMisReservas();
+    } catch (err) {
+        alert(err.message);
     }
 }
 

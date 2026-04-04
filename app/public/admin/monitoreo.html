@@ -12,36 +12,156 @@
         <header class="main-header">
             <h1>Monitoreo Oracle Database</h1>
             <div class="header-actions">
-                <a href="http://192.168.0.16:3000" target="_blank" class="btn-primary">Ver Grafana</a>
+                <label class="switch">
+                    <input type="checkbox" id="mon-auto" checked>
+                    <span class="slider"></span>
+                </label>
+                <select id="mon-interval" class="input-date">
+                    <option value="10">10s</option>
+                    <option value="20">20s</option>
+                    <option value="30" selected>30s</option>
+                    <option value="60">60s</option>
+                </select>
+                <span id="mon-last" class="muted">Actualizado: --:--:--</span>
                 <button onclick="cargarMonitoreo()" class="btn-refresh">Actualizar</button>
             </div>
         </header>
-        
-        <div class="monitoreo-grid">
-            <div class="table-card">
-                <h2>Sesiones Activas (V$SESSION)</h2>
-                <div class="table-container"><table id="mon-sesiones"><thead><tr><th>SID</th><th>Usuario</th><th>Estado</th><th>Máquina</th><th>Evento</th></tr></thead><tbody id="mon-sesiones-body"></tbody></table></div>
-            </div>
-            
-            <div class="table-card">
-                <h2>Bloqueos Activos (V$LOCK)</h2>
-                <div class="table-container"><table id="mon-bloqueos"><thead><tr><th>SID</th><th>Usuario</th><th>Tipo</th><th>Modo</th><th>Request</th><th>Bloquea?</th></tr></thead><tbody id="mon-bloqueos-body"></tbody></table></div>
-            </div>
 
-            <div class="table-card">
-                <h2>Top Consultas Lentas (V$SQL)</h2>
-                <div class="table-container"><table id="mon-top-sql"><thead><tr><th>SQL Text</th><th>Tiempo (ms)</th><th>Ejecs</th><th>Rows</th></tr></thead><tbody id="mon-top-sql-body"></tbody></table></div>
+        <section class="op-kpis">
+            <div class="kpi">
+                <span class="kpi-label">Sesiones</span>
+                <span class="kpi-value" id="mon-kpi-sesiones">--</span>
             </div>
-        </div>
+            <div class="kpi">
+                <span class="kpi-label">Sesiones activas</span>
+                <span class="kpi-value" id="mon-kpi-activas">--</span>
+            </div>
+            <div class="kpi">
+                <span class="kpi-label">Sesiones bloqueadas</span>
+                <span class="kpi-value" id="mon-kpi-bloqueadas">--</span>
+            </div>
+            <div class="kpi">
+                <span class="kpi-label">Bloqueos (lock holders)</span>
+                <span class="kpi-value" id="mon-kpi-bloqueos">--</span>
+            </div>
+        </section>
+
+        <div class="sysmetrics" id="mon-sysmetrics"></div>
+
+        <section class="op-tabs" role="tablist">
+            <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
+            <button class="tab-btn" data-tab="charts" type="button">Gráficos</button>
+            <button class="tab-btn" data-tab="sesiones" type="button">Sesiones</button>
+            <button class="tab-btn" data-tab="bloqueos" type="button">Bloqueos</button>
+            <button class="tab-btn" data-tab="waits" type="button">Waits</button>
+            <button class="tab-btn" data-tab="sql" type="button">Top SQL</button>
+            <button class="tab-btn" data-tab="tx" type="button">Transacciones</button>
+        </section>
+
+        <section class="op-view" id="tab-overview">
+            <div class="table-card">
+                <h2>Top Wait</h2>
+                <div class="muted" id="mon-top-wait">--</div>
+            </div>
+        </section>
+
+        <section class="op-view hidden" id="tab-charts">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-head">
+                        <div class="chart-title">Sesiones (últimos minutos)</div>
+                        <div class="chart-subtitle muted">Total vs activas</div>
+                    </div>
+                    <canvas id="chart-sesiones" width="900" height="240"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-head">
+                        <div class="chart-title">Waits por clase</div>
+                        <div class="chart-subtitle muted">Click para filtrar sesiones</div>
+                    </div>
+                    <canvas id="chart-waits" width="900" height="260"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <section class="op-view hidden" id="tab-sesiones">
+            <div class="table-card">
+                <div class="table-toolbar">
+                    <input id="mon-filter-sesiones" class="input-date" placeholder="Filtrar (usuario/máquina/evento)">
+                </div>
+                <div class="table-container">
+                    <table id="mon-sesiones">
+                        <thead>
+                            <tr>
+                                <th>SID</th><th>Usuario</th><th>Estado</th><th>Máquina</th><th>Programa</th><th>Wait Class</th><th>Evento</th><th>Blocking</th><th>SQL_ID</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mon-sesiones-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="op-view hidden" id="tab-bloqueos">
+            <div class="table-card">
+                <div class="table-container">
+                    <table id="mon-bloqueos">
+                        <thead>
+                            <tr><th>SID</th><th>Usuario</th><th>Tipo</th><th>LMODE</th><th>REQUEST</th><th>BLOCK</th></tr>
+                        </thead>
+                        <tbody id="mon-bloqueos-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="op-view hidden" id="tab-waits">
+            <div class="table-card">
+                <div class="table-container">
+                    <table id="mon-waits">
+                        <thead>
+                            <tr><th>Wait Class</th><th>Evento</th><th>Sesiones</th></tr>
+                        </thead>
+                        <tbody id="mon-waits-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="op-view hidden" id="tab-sql">
+            <div class="table-card">
+                <div class="table-container">
+                    <table id="mon-top-sql">
+                        <thead>
+                            <tr><th>SQL_ID</th><th>Schema</th><th>Elapsed</th><th>CPU</th><th>Ejec</th><th>Rows</th><th>SQL</th></tr>
+                        </thead>
+                        <tbody id="mon-top-sql-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="op-view hidden" id="tab-tx">
+            <div class="table-card">
+                <div class="table-container">
+                    <table id="mon-tx">
+                        <thead>
+                            <tr><th>Start</th><th>Status</th><th>SID</th><th>Usuario</th><th>Máquina</th><th>Programa</th></tr>
+                        </thead>
+                        <tbody id="mon-tx-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
     </main>
     <script src="js/admin.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const user = JSON.parse(localStorage.getItem('admin_user'));
-            if (!user) { window.location.href = 'login.html'; return; }
+            if (!user) { window.location.href = 'index.html'; return; }
             initSidebar(user.privilegios);
-            cargarMonitoreo();
-            setInterval(cargarMonitoreo, 30000);
+            initMonitoreoPage();
         });
     </script>
 </body>

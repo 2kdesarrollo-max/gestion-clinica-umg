@@ -12,6 +12,7 @@ const { initPool } = require('./config/db');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || '127.0.0.1';
 
 // Middlewares
 app.use(cors());
@@ -19,16 +20,24 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Middleware para asegurar charset UTF-8 en respuestas JSON de la API
+app.use('/api', (req, res, next) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true });
+});
+
 // Archivos estáticos
 app.use('/imagenes', express.static(
-  path.join(__dirname, '../../imagenes')
+  path.join(__dirname, '../imagenes')
 ));
-app.use('/portal', express.static(
-  path.join(__dirname, 'public/portal')
-));
-app.use('/admin', express.static(
-  path.join(__dirname, 'public/admin')
-));
+// Servir portal de paciente en la raíz
+app.use(express.static(path.join(__dirname, 'public/portal')));
+// Servir portal de administración en /admin
+app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 
 // Rutas API
 app.use('/api/auth',          require('./routes/auth'));
@@ -43,16 +52,7 @@ app.use('/api/reportes',      require('./routes/reportes'));
 app.use('/api/usuarios',      require('./routes/usuarios'));
 app.use('/api/perfiles',      require('./routes/perfiles'));
 app.use('/api/monitoreo',     require('./routes/monitoreo'));
-
-// Ruta raíz → Portal paciente
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/portal/index.html'));
-});
-
-// Ruta admin → Portal hospital
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/admin/index.html'));
-});
+app.use('/api/grafana',       require('./routes/grafana'));
 
 // Manejo de errores global
 app.use((err, req, res, next) => {
@@ -62,7 +62,7 @@ app.use((err, req, res, next) => {
 
 // Iniciar servidor
 initPool().then(() => {
-  app.listen(PORT, () => {
+  app.listen(PORT, HOST, () => {
     console.log(`
 ╔════════════════════════════════════════════╗
 ║   GESTIÓN CLÍNICA INTEGRAL UMG             ║

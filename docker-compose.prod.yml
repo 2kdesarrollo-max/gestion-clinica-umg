@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: gci-api
+    env_file:
+      - ./app/.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      DB_HOST: oracle-xe
+      DB_PORT: 1521
+      DB_SERVICE: XEPDB1
+    expose:
+      - "3001"
+    restart: unless-stopped
+    networks:
+      - gci-net
+
+  caddy:
+    image: caddy:2
+    container_name: gci-caddy
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    networks:
+      - gci-net
+
+networks:
+  gci-net:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:

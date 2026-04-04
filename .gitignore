@@ -1,7 +1,7 @@
 node_modules/
 app/.env
+app/.env.*
 *.log
 .DS_Store
 Thumbs.db
 docs/*.pdf
-imagenes/
