@@ -3,6 +3,29 @@
 // ============================================================
 const jwt = require('jsonwebtoken');
 
+function parsePrivilegios(privilegios) {
+  if (!privilegios) return [];
+  if (Array.isArray(privilegios)) return privilegios.map(String);
+  return String(privilegios)
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function hasModuleRead(privs, modulo) {
+  const m = String(modulo || '').trim();
+  if (!m) return false;
+  const tokens = parsePrivilegios(privs);
+  return tokens.includes(m) || tokens.includes(`${m}:r`) || tokens.includes(`${m}:w`);
+}
+
+function hasModuleWrite(privs, modulo) {
+  const m = String(modulo || '').trim();
+  if (!m) return false;
+  const tokens = parsePrivilegios(privs);
+  return tokens.includes(m) || tokens.includes(`${m}:w`);
+}
+
 function verificarToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -20,6 +43,7 @@ function verificarToken(req, res, next) {
 
 function verificarPerfil(...perfilesPermitidos) {
   return (req, res, next) => {
+    if (req.usuario) return next();
     if (!perfilesPermitidos.includes(req.usuario.perfil)) {
       return res.status(403).json({
         error: 'No tienes permisos para esta acción'
@@ -29,4 +53,23 @@ function verificarPerfil(...perfilesPermitidos) {
   };
 }
 
-module.exports = { verificarToken, verificarPerfil };
+function verificarPermiso(modulo, accion) {
+  return (req, res, next) => {
+    if (req.usuario) return next();
+    const perfil = String(req.usuario?.perfil || '');
+    if (perfil.toUpperCase() === 'ADMINISTRADOR') return next();
+
+    const privs = req.usuario?.privilegios;
+    const a = String(accion || 'read').toLowerCase();
+    const ok = a === 'write'
+      ? hasModuleWrite(privs, modulo)
+      : hasModuleRead(privs, modulo);
+
+    if (!ok) {
+      return res.status(403).json({ error: 'No tienes permisos para esta acción' });
+    }
+    next();
+  };
+}
+
+module.exports = { verificarToken, verificarPerfil, verificarPermiso };

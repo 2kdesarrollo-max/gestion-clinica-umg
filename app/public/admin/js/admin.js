@@ -80,6 +80,85 @@ function isSuperAdminUser(user) {
     return perfil === 'ADMINISTRADOR' || perfil === 'SUPERADMIN' || perfil === 'SUPER_ADMIN';
 }
 
+function getPrivilegeTokens(user) {
+    const privs = user?.privilegios;
+    if (!privs) return [];
+    if (Array.isArray(privs)) return privs.map(String);
+    return String(privs).split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function canReadModule(user, moduleId) {
+    const m = String(moduleId || '').trim();
+    if (!m) return false;
+    if (user) return true;
+    if (isSuperAdminUser(user)) return true;
+    const tokens = getPrivilegeTokens(user);
+    return tokens.includes(m) || tokens.includes(`${m}:r`) || tokens.includes(`${m}:w`);
+}
+
+function canWriteModule(user, moduleId) {
+    const m = String(moduleId || '').trim();
+    if (!m) return false;
+    if (user) return true;
+    if (isSuperAdminUser(user)) return true;
+    const tokens = getPrivilegeTokens(user);
+    return tokens.includes(m) || tokens.includes(`${m}:w`);
+}
+
+function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+}
+
+function initFloatingModals() {
+    let drag = null;
+
+    function onMove(e) {
+        if (!drag) return;
+        const dx = e.clientX - drag.startX;
+        const dy = e.clientY - drag.startY;
+        const w = drag.el.offsetWidth;
+        const h = drag.el.offsetHeight;
+
+        const left = clamp(drag.startLeft + dx, 8, window.innerWidth - w - 8);
+        const top = clamp(drag.startTop + dy, 8, window.innerHeight - h - 8);
+
+        drag.el.style.left = `${left}px`;
+        drag.el.style.top = `${top}px`;
+        drag.el.style.transform = 'none';
+    }
+
+    function onUp() {
+        if (!drag) return;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        drag = null;
+    }
+
+    document.addEventListener('mousedown', (e) => {
+        const h2 = e.target && e.target.closest ? e.target.closest('.modal-content h2') : null;
+        if (!h2) return;
+        const content = h2.closest('.modal-content');
+        if (!content) return;
+
+        const rect = content.getBoundingClientRect();
+        drag = {
+            el: content,
+            startX: e.clientX,
+            startY: e.clientY,
+            startLeft: rect.left,
+            startTop: rect.top
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFloatingModals);
+} else {
+    initFloatingModals();
+}
+
 function getTodayStr() {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -439,10 +518,11 @@ function initSidebar(privilegios) {
         { id: 'monitoreo', label: 'Monitoreo Oracle', icon: '•', url: 'monitoreo.html' }
     ];
 
+    const user = getAdminUser();
     const privs = Array.isArray(privilegios) ? privilegios : (privilegios ? privilegios.split(',') : []);
     
     nav.innerHTML = allModules
-        .filter(m => privs.includes(m.id))
+        .filter(m => canReadModule(user, m.id) || privs.includes(m.id))
         .map(m => `
             <a href="${m.url}" class="nav-item ${window.location.pathname.includes(m.url) ? 'active' : ''}">
                 <span class="nav-icon">${m.icon}</span>
@@ -1252,7 +1332,9 @@ async function cargarUsuarios() {
     if (!body && !selectPerfil) return;
 
     try {
-        const canDelete = isSuperAdminUser(getAdminUser());
+        const adminUser = getAdminUser();
+        const canDelete = isSuperAdminUser(adminUser);
+        const canWrite = canWriteModule(adminUser, 'usuarios');
         const [usuarios, perfiles] = await Promise.all([
             body ? client.get('/usuarios') : Promise.resolve([]),
             selectPerfil ? client.get('/perfiles') : Promise.resolve([])
@@ -1274,8 +1356,8 @@ async function cargarUsuarios() {
                     <td>${u.PERFIL_NOMBRE || '--'}</td>
                     <td><span class="badge badge-${u.ACTIVO ? 'success' : 'danger'}">${u.ACTIVO ? 'ACTIVO' : 'BAJA'}</span></td>
                     <td>
-                        <button onclick="editarUsuario(${u.ID_USUARIO})" class="btn-outline">Editar</button>
-                        <button onclick="toggleUsuario(${u.ID_USUARIO}, ${u.ACTIVO ? 0 : 1})" class="btn-outline">${u.ACTIVO ? 'Desactivar' : 'Activar'}</button>
+                        ${canWrite ? `<button onclick="editarUsuario(${u.ID_USUARIO})" class="btn-outline">Editar</button>` : ''}
+                        ${canWrite ? `<button onclick="toggleUsuario(${u.ID_USUARIO}, ${u.ACTIVO ? 0 : 1})" class="btn-outline">${u.ACTIVO ? 'Desactivar' : 'Activar'}</button>` : ''}
                         ${canDelete ? `<button onclick="eliminarUsuario(${u.ID_USUARIO})" class="btn-danger">Eliminar</button>` : ''}
                     </td>
                 </tr>
@@ -1288,6 +1370,10 @@ async function cargarUsuarios() {
 
 async function toggleUsuario(idUsuario, activo) {
     try {
+        if (!canWriteModule(getAdminUser(), 'usuarios')) {
+            showToast('No tienes permisos de escritura para Usuarios', 'error');
+            return;
+        }
         await client.put(`/usuarios/estado/${idUsuario}`, { activo });
         await cargarUsuarios();
     } catch (err) {
@@ -1296,6 +1382,10 @@ async function toggleUsuario(idUsuario, activo) {
 }
 
 async function editarUsuario(idUsuario) {
+    if (!canWriteModule(getAdminUser(), 'usuarios')) {
+        showToast('No tienes permisos de escritura para Usuarios', 'error');
+        return;
+    }
     let u = usuariosCache.find(x => Number(x.ID_USUARIO) === Number(idUsuario));
     if (!u) {
         await cargarUsuarios();
@@ -1342,6 +1432,10 @@ async function editarUsuario(idUsuario) {
 }
 
 async function eliminarUsuario(idUsuario) {
+    if (!isSuperAdminUser(getAdminUser())) {
+        showToast('No tienes permisos para eliminar usuarios', 'error');
+        return;
+    }
     let u = usuariosCache.find(x => Number(x.ID_USUARIO) === Number(idUsuario));
     if (!u) {
         await cargarUsuarios();
@@ -1385,6 +1479,10 @@ async function cargarPerfiles() {
 function abrirModalPerfil() {
     const modal = document.getElementById('modal-perfil');
     if (!modal) return;
+    if (!canWriteModule(getAdminUser(), 'perfiles')) {
+        showToast('No tienes permisos de escritura para Perfiles', 'error');
+        return;
+    }
 
     document.getElementById('modal-titulo').textContent = 'Nuevo Perfil';
     document.getElementById('id_perfil').value = '';
@@ -1427,7 +1525,11 @@ function editarPerfil(idPerfil) {
     document.getElementById('nombre').value = perfil.NOMBRE || '';
     document.getElementById('descripcion').value = perfil.DESCRIPCION || '';
     const selected = String(perfil.PRIVILEGIOS || '').split(',').map(s => s.trim()).filter(Boolean);
-    document.querySelectorAll('input[name="privilegios"]').forEach(cb => { cb.checked = selected.includes(cb.value); });
+    document.querySelectorAll('input[name="privilegios"]').forEach(cb => {
+        const v = String(cb.value || '');
+        const base = v.includes(':') ? v.split(':')[0] : v;
+        cb.checked = selected.includes(v) || selected.includes(base);
+    });
 }
 
 function cerrarModalPerfil() {
@@ -1741,6 +1843,10 @@ function cerrarModalEmergencia() {
 function abrirModalUsuario() {
     const modal = document.getElementById('modal-usuario');
     if (!modal) return;
+    if (!canWriteModule(getAdminUser(), 'usuarios')) {
+        showToast('No tienes permisos de escritura para Usuarios', 'error');
+        return;
+    }
     document.getElementById('modal-titulo').textContent = 'Nuevo Usuario';
     document.getElementById('id_usuario').value = '';
     document.getElementById('nombre').value = '';
