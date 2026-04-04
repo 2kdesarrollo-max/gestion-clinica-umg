@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { getConnection } = require('../config/db');
-const { verificarToken } = require('../middleware/auth');
+const { verificarToken, verificarPerfil } = require('../middleware/auth');
 
 // Obtener todos los perfiles
-router.get('/', verificarToken, async (req, res) => {
+router.get('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
   let conn;
   try {
     conn = await getConnection();
@@ -18,7 +18,7 @@ router.get('/', verificarToken, async (req, res) => {
 });
 
 // Crear perfil
-router.post('/', verificarToken, async (req, res) => {
+router.post('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
   const { nombre, descripcion, privilegios } = req.body;
   let conn;
   try {
@@ -38,7 +38,7 @@ router.post('/', verificarToken, async (req, res) => {
 });
 
 // Actualizar privilegios
-router.put('/:id', verificarToken, async (req, res) => {
+router.put('/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
   const { nombre, descripcion, privilegios } = req.body;
   let conn;
   try {

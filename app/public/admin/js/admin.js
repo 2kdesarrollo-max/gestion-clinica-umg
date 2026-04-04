@@ -64,7 +64,21 @@ let especialidadesCache = [];
 let equiposCache = [];
 let perfilesCache = [];
 let reservasCache = [];
+let usuariosCache = [];
 let reservaPreset = null;
+
+function getAdminUser() {
+    try {
+        return JSON.parse(localStorage.getItem('admin_user') || 'null');
+    } catch {
+        return null;
+    }
+}
+
+function isSuperAdminUser(user) {
+    const perfil = String(user?.perfil || '').toUpperCase();
+    return perfil === 'ADMINISTRADOR' || perfil === 'SUPERADMIN' || perfil === 'SUPER_ADMIN';
+}
 
 function getTodayStr() {
     const d = new Date();
@@ -1238,6 +1252,7 @@ async function cargarUsuarios() {
     if (!body && !selectPerfil) return;
 
     try {
+        const canDelete = isSuperAdminUser(getAdminUser());
         const [usuarios, perfiles] = await Promise.all([
             body ? client.get('/usuarios') : Promise.resolve([]),
             selectPerfil ? client.get('/perfiles') : Promise.resolve([])
@@ -1250,6 +1265,7 @@ async function cargarUsuarios() {
         }
 
         if (body) {
+            usuariosCache = Array.isArray(usuarios) ? usuarios : [];
             body.innerHTML = usuarios.map(u => `
                 <tr>
                     <td>${u.NOMBRE} ${u.APELLIDO}</td>
@@ -1258,7 +1274,9 @@ async function cargarUsuarios() {
                     <td>${u.PERFIL_NOMBRE || '--'}</td>
                     <td><span class="badge badge-${u.ACTIVO ? 'success' : 'danger'}">${u.ACTIVO ? 'ACTIVO' : 'BAJA'}</span></td>
                     <td>
+                        <button onclick="editarUsuario(${u.ID_USUARIO})" class="btn-outline">Editar</button>
                         <button onclick="toggleUsuario(${u.ID_USUARIO}, ${u.ACTIVO ? 0 : 1})" class="btn-outline">${u.ACTIVO ? 'Desactivar' : 'Activar'}</button>
+                        ${canDelete ? `<button onclick="eliminarUsuario(${u.ID_USUARIO})" class="btn-danger">Eliminar</button>` : ''}
                     </td>
                 </tr>
             `).join('');
@@ -1274,6 +1292,70 @@ async function toggleUsuario(idUsuario, activo) {
         await cargarUsuarios();
     } catch (err) {
         alert(err.message);
+    }
+}
+
+async function editarUsuario(idUsuario) {
+    let u = usuariosCache.find(x => Number(x.ID_USUARIO) === Number(idUsuario));
+    if (!u) {
+        await cargarUsuarios();
+        u = usuariosCache.find(x => Number(x.ID_USUARIO) === Number(idUsuario));
+    }
+    if (!u) return;
+
+    abrirModalUsuario();
+    const titulo = document.getElementById('modal-titulo');
+    if (titulo) titulo.textContent = 'Editar Usuario';
+
+    const idEl = document.getElementById('id_usuario');
+    if (idEl) idEl.value = u.ID_USUARIO;
+    const nombreEl = document.getElementById('nombre');
+    if (nombreEl) nombreEl.value = u.NOMBRE || '';
+    const apellidoEl = document.getElementById('apellido');
+    if (apellidoEl) apellidoEl.value = u.APELLIDO || '';
+    const emailEl = document.getElementById('email');
+    if (emailEl) emailEl.value = u.EMAIL || '';
+
+    const usernameEl = document.getElementById('username');
+    if (usernameEl) {
+        usernameEl.value = u.USERNAME || '';
+        usernameEl.disabled = true;
+        usernameEl.removeAttribute('required');
+    }
+
+    const passGroup = document.getElementById('pass-group');
+    if (passGroup) passGroup.style.display = 'none';
+    const passEl = document.getElementById('password');
+    if (passEl) {
+        passEl.value = '';
+        passEl.required = false;
+    }
+
+    const selectPerfil = document.getElementById('id_perfil');
+    if (selectPerfil) {
+        if (selectPerfil.options.length === 0) {
+            const perfiles = await client.get('/perfiles');
+            selectPerfil.innerHTML = (Array.isArray(perfiles) ? perfiles : []).map(p => `<option value="${p.ID_PERFIL}">${p.NOMBRE}</option>`).join('');
+        }
+        selectPerfil.value = String(u.ID_PERFIL);
+    }
+}
+
+async function eliminarUsuario(idUsuario) {
+    let u = usuariosCache.find(x => Number(x.ID_USUARIO) === Number(idUsuario));
+    if (!u) {
+        await cargarUsuarios();
+        u = usuariosCache.find(x => Number(x.ID_USUARIO) === Number(idUsuario));
+    }
+    const label = u ? `${u.NOMBRE} ${u.APELLIDO} (@${u.USERNAME})` : `#${idUsuario}`;
+    const ok = confirm(`¿Eliminar definitivamente al usuario ${label}?`);
+    if (!ok) return;
+    try {
+        await client.delete(`/usuarios/${idUsuario}`);
+        showToast('Usuario eliminado', 'success');
+        await cargarUsuarios();
+    } catch (err) {
+        showToast(err.message, 'error');
     }
 }
 
@@ -1663,9 +1745,18 @@ function abrirModalUsuario() {
     document.getElementById('id_usuario').value = '';
     document.getElementById('nombre').value = '';
     document.getElementById('apellido').value = '';
-    document.getElementById('username').value = '';
+    const usernameEl = document.getElementById('username');
+    if (usernameEl) {
+        usernameEl.value = '';
+        usernameEl.disabled = false;
+        usernameEl.required = true;
+    }
     document.getElementById('email').value = '';
-    document.getElementById('password').value = '';
+    const passEl = document.getElementById('password');
+    if (passEl) {
+        passEl.value = '';
+        passEl.required = true;
+    }
     const passGroup = document.getElementById('pass-group');
     if (passGroup) passGroup.style.display = 'block';
     modal.style.display = 'block';
@@ -1673,7 +1764,7 @@ function abrirModalUsuario() {
     bindOnce('usuario-form-init', async () => {
         const perfiles = await client.get('/perfiles');
         const selectPerfil = document.getElementById('id_perfil');
-        if (selectPerfil) {
+        if (selectPerfil && selectPerfil.options.length === 0) {
             selectPerfil.innerHTML = perfiles.map(p => `<option value="${p.ID_PERFIL}">${p.NOMBRE}</option>`).join('');
         }
     });

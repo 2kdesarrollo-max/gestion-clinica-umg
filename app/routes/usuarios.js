@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { getConnection } = require('../config/db');
-const { verificarToken } = require('../middleware/auth');
+const { verificarToken, verificarPerfil } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 
 // Obtener todos los usuarios
-router.get('/', verificarToken, async (req, res) => {
+router.get('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
   let conn;
   try {
     conn = await getConnection();
@@ -24,11 +24,12 @@ router.get('/', verificarToken, async (req, res) => {
 });
 
 // Crear usuario
-router.post('/', verificarToken, async (req, res) => {
+router.post('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
   const { nombre, apellido, username, email, password, id_perfil } = req.body;
   let conn;
   try {
     conn = await getConnection();
+    if (!password) return res.status(400).json({ error: 'Contraseña requerida' });
     const hash = await bcrypt.hash(password, 10);
     await conn.execute(
       `INSERT INTO USUARIOS_SISTEMA (id_usuario, nombre, apellido, username, email, password_hash, id_perfil, activo)
@@ -45,7 +46,7 @@ router.post('/', verificarToken, async (req, res) => {
 });
 
 // Actualizar usuario
-router.put('/:id', verificarToken, async (req, res) => {
+router.put('/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
   const { nombre, apellido, email, id_perfil } = req.body;
   let conn;
   try {
@@ -66,7 +67,7 @@ router.put('/:id', verificarToken, async (req, res) => {
 });
 
 // Activar/Desactivar usuario
-router.put('/estado/:id', verificarToken, async (req, res) => {
+router.put('/estado/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
   const { activo } = req.body;
   let conn;
   try {
@@ -77,6 +78,27 @@ router.put('/estado/:id', verificarToken, async (req, res) => {
     );
     await conn.commit();
     res.json({ mensaje: `Usuario ${activo === 1 ? 'activado' : 'desactivado'}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (conn) await conn.close();
+  }
+});
+
+// Eliminar usuario
+router.delete('/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+  let conn;
+  try {
+    conn = await getConnection();
+    const result = await conn.execute(
+      `DELETE FROM USUARIOS_SISTEMA WHERE id_usuario = :id`,
+      { id: req.params.id }
+    );
+    if (result.rowsAffected === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    await conn.commit();
+    res.json({ mensaje: 'Usuario eliminado' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {
