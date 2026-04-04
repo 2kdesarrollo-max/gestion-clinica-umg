@@ -10,8 +10,10 @@ class APIClient {
     }
 
     async fetch(endpoint, options = {}) {
+        this.token = localStorage.getItem('admin_token');
         const headers = {
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
             ...options.headers
         };
         if (this.token) {
@@ -21,8 +23,12 @@ class APIClient {
         try {
             const response = await fetch(`${API_URL}${endpoint}`, {
                 ...options,
-                headers
+                headers,
+                cache: 'no-store'
             });
+            if (response.status === 304 || response.status === 204) {
+                return null;
+            }
             const data = await response.json();
             if (!response.ok) {
                 if (response.status === 401 || response.status === 403) {
@@ -800,13 +806,21 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
 
     const colsRaw = Array.isArray(quirofanos) ? quirofanos : [];
     const reservasRaw = Array.isArray(reservas) ? reservas : [];
-    const cols = colsRaw.filter(q => Number(q.ACTIVO ?? 1) === 1);
+    const emergenciasRaw = Array.isArray(emergencias) ? emergencias : [];
+    const bloqueosRaw = Array.isArray(bloqueos) ? bloqueos : [];
+
+    const colsActive = colsRaw.filter(q => Number(q.ACTIVO ?? 1) === 1);
     const qidsInReservas = new Set(reservasRaw.map(r => Number(r.ID_QUIROFANO)).filter(n => Number.isFinite(n)));
     const missing = colsRaw.filter(q => Number(q.ACTIVO ?? 1) !== 1 && qidsInReservas.has(Number(q.ID_QUIROFANO)));
-    const colsFinal = cols.concat(missing);
+    const colsFinal = colsActive.concat(missing);
+
     const colCount = colsFinal.length || 1;
     const gridCols = `80px repeat(${colCount}, minmax(220px, 1fr))`;
     const minWidthPx = 80 + (colCount * 240);
+
+    const reservasById = new Map();
+    reservasRaw.forEach(r => reservasById.set(Number(r.ID_RESERVA), r));
+    window.__reservasById = reservasById;
 
     const head = `
         <div class="scheduler-inner" style="min-width:${minWidthPx}px;">
@@ -823,15 +837,11 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
 
     const times = Array.from({ length: 24 }).map((_, i) => `<div class="scheduler-time">${String(i).padStart(2, '0')}:00</div>`).join('');
 
-    const reservasById = new Map();
-    reservasRaw.forEach(r => reservasById.set(Number(r.ID_RESERVA), r));
-    window.__reservasById = reservasById;
-
     const colsHtml = colsFinal.map(q => {
         const qid = Number(q.ID_QUIROFANO);
         const blocks = [];
 
-        (Array.isArray(bloqueos) ? bloqueos : [])
+        bloqueosRaw
             .filter(b => Number(b.ID_QUIROFANO) === qid)
             .forEach(b => {
                 const hi = parseDateValue(b.INICIO);
@@ -856,15 +866,16 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
                 if (!hi || !hf) return;
                 if (dateStrFromValue(r.FECHA_RESERVA) !== fecha) return;
 
+                const estado = String(r.ESTADO || '').toUpperCase();
+                if (estado === 'CANCELADA') return;
+
                 const top = Math.max(0, minutesFromTime(hi) - startMin);
                 const height = Math.max(24, minutesFromTime(hf) - minutesFromTime(hi));
-                const estado = String(r.ESTADO || '').toUpperCase();
 
                 let cls = 'sched-pending';
                 if (estado === 'APROBADA') cls = 'sched-approved';
                 else if (estado === 'EN_CURSO') cls = 'sched-running';
                 else if (estado === 'COMPLETADA') cls = 'sched-done';
-                else if (estado === 'CANCELADA') cls = 'sched-cancelled';
 
                 blocks.push(`
                     <div class="sched-block ${cls}" style="top:${top}px;height:${height}px;" data-kind="reserva" data-id="${r.ID_RESERVA}">
@@ -875,12 +886,12 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
                 `);
             });
 
-        emergencias
+        emergenciasRaw
             .filter(e => Number(e.ID_QUIROFANO) === qid)
             .forEach(e => {
+                if (dateStrFromValue(e.FECHA_HORA) !== fecha) return;
                 const fh = parseDateValue(e.FECHA_HORA);
                 if (!fh) return;
-                if (toDateStr(fh) !== fecha) return;
                 const top = Math.max(0, minutesFromTime(fh) - startMin);
                 const height = 60;
                 blocks.push(`
@@ -892,85 +903,24 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
                 `);
             });
 
-        return `<div class="scheduler-col" data-qid="${qid}" style="height:${totalHeight}px;"></div>`;
+        return `<div class="scheduler-col" data-qid="${qid}" style="height:${totalHeight}px;">${blocks.join('')}</div>`;
     }).join('');
 
     const body = `
             <div class="scheduler-body-grid" style="grid-template-columns: ${gridCols};">
                 <div class="scheduler-times">${times}</div>
-                ${cols.map(q => `<div class="scheduler-col" data-qid="${q.ID_QUIROFANO}" style="height:${totalHeight}px;"></div>`).join('')}
+                ${colsHtml}
             </div>
         </div>
     `;
 
     root.innerHTML = head + body;
 
-    const colsEls = Array.from(root.querySelectorAll('.scheduler-col'));
-    colsEls.forEach(colEl => {
-        const qid = Number(colEl.dataset.qid);
-        const q = cols.find(x => Number(x.ID_QUIROFANO) === qid);
-        if (!q) return;
-
-        const fragments = [];
-        if (q.ESTADO === 'MANTENIMIENTO') {
-            fragments.push(`
-                <div class="sched-block sched-maint" style="top: 8px; height: ${totalHeight - 16}px;" data-kind="mantenimiento" data-qid="${qid}">
-                    <div class="sched-title">MANTENIMIENTO</div>
-                    <div class="sched-meta">${q.NOMBRE}</div>
-                </div>
-            `);
-        }
-
-        reservas
-            .filter(r => Number(r.ID_QUIROFANO) === qid)
-            .forEach(r => {
-                const hi = parseDateValue(r.HORA_INICIO);
-                const hf = parseDateValue(r.HORA_FIN);
-                const fr = parseDateValue(r.FECHA_RESERVA);
-                if (!hi || !hf || !fr) return;
-                if (toDateStr(fr) !== fecha) return;
-
-                const top = Math.max(0, minutesFromTime(hi) - startMin);
-                const height = Math.max(24, minutesFromTime(hf) - minutesFromTime(hi));
-                const estado = String(r.ESTADO || '').toUpperCase();
-
-                let cls = 'sched-pending';
-                if (estado === 'APROBADA') cls = 'sched-approved';
-                else if (estado === 'EN_CURSO') cls = 'sched-running';
-                else if (estado === 'COMPLETADA') cls = 'sched-done';
-                else if (estado === 'CANCELADA') cls = 'sched-cancelled';
-
-                fragments.push(`
-                    <div class="sched-block ${cls}" style="top:${top}px;height:${height}px;" data-kind="reserva" data-id="${r.ID_RESERVA}">
-                        <div class="sched-title">${r.TIPO_CIRUGIA || 'Reserva'}</div>
-                        <div class="sched-meta">${r.PACIENTE || ''}</div>
-                        <div class="sched-meta">${r.MEDICO || ''} · ${minutesToTimeStr(minutesFromTime(hi))}-${minutesToTimeStr(minutesFromTime(hf))}</div>
-                    </div>
-                `);
-            });
-
-        emergencias
-            .filter(e => Number(e.ID_QUIROFANO) === qid)
-            .forEach(e => {
-                const fh = parseDateValue(e.FECHA_HORA);
-                if (!fh) return;
-                if (toDateStr(fh) !== fecha) return;
-                const top = Math.max(0, minutesFromTime(fh) - startMin);
-                const height = 60;
-                fragments.push(`
-                    <div class="sched-block sched-emergency pulse" style="top:${top}px;height:${height}px;" data-kind="emergencia" data-id="${e.ID_EMERGENCIA}">
-                        <div class="sched-title">EMERGENCIA</div>
-                        <div class="sched-meta">${e.PACIENTE || ''}</div>
-                        <div class="sched-meta">${e.MEDICO || ''} · ${e.NIVEL_PRIORIDAD || ''}</div>
-                    </div>
-                `);
-            });
-
-        colEl.innerHTML = fragments.join('');
-
+    Array.from(root.querySelectorAll('.scheduler-col')).forEach(colEl => {
         colEl.addEventListener('click', (ev) => {
             const block = ev.target.closest('.sched-block');
             if (block) return;
+            const qid = Number(colEl.dataset.qid);
             const rect = colEl.getBoundingClientRect();
             const y = ev.clientY - rect.top;
             const minutes = startMin + Math.max(0, Math.min(totalHeight - 1, Math.floor(y)));
@@ -982,17 +932,10 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
     });
 
     root.querySelectorAll('.sched-block[data-kind=\"reserva\"]').forEach(el => {
-        el.addEventListener('click', () => {
-            const id = Number(el.dataset.id);
-            openReservaDetail(id);
-        });
+        el.addEventListener('click', () => openReservaDetail(Number(el.dataset.id)));
     });
-
     root.querySelectorAll('.sched-block[data-kind=\"emergencia\"]').forEach(el => {
-        el.addEventListener('click', () => {
-            const id = Number(el.dataset.id);
-            openEmergenciaDetail(id);
-        });
+        el.addEventListener('click', () => openEmergenciaDetail(Number(el.dataset.id)));
     });
 }
 
