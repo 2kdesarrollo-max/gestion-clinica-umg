@@ -77,7 +77,7 @@ function getAdminUser() {
 
 function isSuperAdminUser(user) {
     const perfil = String(user?.perfil || '').toUpperCase();
-    return perfil === 'ADMINISTRADOR' || perfil === 'SUPERADMIN' || perfil === 'SUPER_ADMIN';
+    return perfil === 'SUPERADMIN' || perfil === 'SUPER_ADMIN';
 }
 
 const DEFAULT_PRIVILEGIOS = [
@@ -133,7 +133,7 @@ function canWriteModule(user, moduleId) {
     if (!m) return false;
     if (isSuperAdminUser(user)) return true;
     const tokens = getPrivilegeTokens(user);
-    return tokens.includes(m) || tokens.includes(`${m}:w`);
+    return tokens.includes(`${m}:w`);
 }
 
 function clamp(n, min, max) {
@@ -683,24 +683,24 @@ async function refreshDashboard() {
             reservasCompletadas,
             emergenciasActivas,
             quirofanosAll,
-            reservasDia
+            reservasDia,
+            bloqueosDia
         ] = await Promise.all([
             client.get('/quirofanos/disponibles'),
             client.get(`/reservas?estado=SOLICITADA`),
             client.get(`/reservas?estado=COMPLETADA&fecha=${encodeURIComponent(fecha)}`),
             client.get('/emergencias'),
             client.get('/quirofanos'),
-            client.get(`/reservas?fecha=${encodeURIComponent(fecha)}`)
+            client.get(`/reservas?fecha=${encodeURIComponent(fecha)}`),
+            client.get(`/quirofanos/bloqueos?fecha=${encodeURIComponent(fecha)}`)
         ]);
 
         const reservasSolicitadasDia = (Array.isArray(reservasSolicitadasAll) ? reservasSolicitadasAll : []).filter(r => {
-            const fr = parseDateValue(r.FECHA_RESERVA);
-            return fr && toDateStr(fr) === fecha;
+            return dateStrFromValue(r.FECHA_RESERVA) === fecha;
         });
 
         const emergenciasDia = (Array.isArray(emergenciasActivas) ? emergenciasActivas : []).filter(e => {
-            const d = parseDateValue(e.FECHA_HORA);
-            return d && toDateStr(d) === fecha;
+            return dateStrFromValue(e.FECHA_HORA) === fecha;
         });
 
         if (statQuirofanos) statQuirofanos.textContent = Array.isArray(quirofanosDisponibles) ? quirofanosDisponibles.length : 0;
@@ -709,7 +709,14 @@ async function refreshDashboard() {
         if (statCompletadas) statCompletadas.textContent = Array.isArray(reservasCompletadas) ? reservasCompletadas.length : 0;
 
         if (schedulerRoot) {
-            renderScheduler(schedulerRoot, Array.isArray(quirofanosAll) ? quirofanosAll : [], Array.isArray(reservasDia) ? reservasDia : [], emergenciasDia, fecha);
+            renderScheduler(
+                schedulerRoot,
+                Array.isArray(quirofanosAll) ? quirofanosAll : [],
+                Array.isArray(reservasDia) ? reservasDia : [],
+                emergenciasDia,
+                Array.isArray(bloqueosDia) ? bloqueosDia : [],
+                fecha
+            );
         }
 
         if (solicitudesBody) {
@@ -763,6 +770,18 @@ function parseDateValue(v) {
     return d;
 }
 
+function dateStrFromValue(v) {
+    if (!v) return null;
+    if (typeof v === 'string') {
+        const s = v.trim();
+        if (s.length >= 10 && s[4] === '-' && s[7] === '-') return s.slice(0, 10);
+    }
+    if (v instanceof Date) return toDateStr(v);
+    const d = parseDateValue(v);
+    if (!d) return null;
+    return toDateStr(d);
+}
+
 function toDateStr(d) {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -774,13 +793,18 @@ function minutesFromTime(d) {
     return d.getHours() * 60 + d.getMinutes();
 }
 
-function renderScheduler(root, quirofanos, reservas, emergencias, fecha) {
+function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fecha) {
     const startMin = 0;
     const endMin = 24 * 60;
     const totalHeight = (endMin - startMin);
 
-    const cols = quirofanos.filter(q => q.ACTIVO === 1);
-    const colCount = cols.length || 1;
+    const colsRaw = Array.isArray(quirofanos) ? quirofanos : [];
+    const reservasRaw = Array.isArray(reservas) ? reservas : [];
+    const cols = colsRaw.filter(q => Number(q.ACTIVO ?? 1) === 1);
+    const qidsInReservas = new Set(reservasRaw.map(r => Number(r.ID_QUIROFANO)).filter(n => Number.isFinite(n)));
+    const missing = colsRaw.filter(q => Number(q.ACTIVO ?? 1) !== 1 && qidsInReservas.has(Number(q.ID_QUIROFANO)));
+    const colsFinal = cols.concat(missing);
+    const colCount = colsFinal.length || 1;
     const gridCols = `80px repeat(${colCount}, minmax(220px, 1fr))`;
     const minWidthPx = 80 + (colCount * 240);
 
@@ -788,7 +812,7 @@ function renderScheduler(root, quirofanos, reservas, emergencias, fecha) {
         <div class="scheduler-inner" style="min-width:${minWidthPx}px;">
             <div class="scheduler-header-grid" style="grid-template-columns: ${gridCols};">
                 <div class="scheduler-head-cell time">Horario</div>
-                ${cols.map(q => `
+                ${colsFinal.map(q => `
                     <div class="scheduler-head-cell">
                         ${q.NOMBRE}
                         <div style="font-weight: 650; font-size: 0.78rem; color: rgba(31,41,55,0.65); margin-top: 2px;">${q.ESTADO}</div>
@@ -800,30 +824,37 @@ function renderScheduler(root, quirofanos, reservas, emergencias, fecha) {
     const times = Array.from({ length: 24 }).map((_, i) => `<div class="scheduler-time">${String(i).padStart(2, '0')}:00</div>`).join('');
 
     const reservasById = new Map();
-    reservas.forEach(r => reservasById.set(Number(r.ID_RESERVA), r));
+    reservasRaw.forEach(r => reservasById.set(Number(r.ID_RESERVA), r));
     window.__reservasById = reservasById;
 
-    const colsHtml = cols.map(q => {
+    const colsHtml = colsFinal.map(q => {
         const qid = Number(q.ID_QUIROFANO);
         const blocks = [];
 
-        if (q.ESTADO === 'MANTENIMIENTO') {
-            blocks.push(`
-                <div class="sched-block sched-maint" style="top: 8px; height: ${totalHeight - 16}px;" data-kind="mantenimiento" data-qid="${qid}">
-                    <div class="sched-title">MANTENIMIENTO</div>
-                    <div class="sched-meta">${q.NOMBRE}</div>
-                </div>
-            `);
-        }
+        (Array.isArray(bloqueos) ? bloqueos : [])
+            .filter(b => Number(b.ID_QUIROFANO) === qid)
+            .forEach(b => {
+                const hi = parseDateValue(b.INICIO);
+                const hf = parseDateValue(b.FIN);
+                if (!hi || !hf) return;
+                const top = Math.max(0, minutesFromTime(hi) - startMin);
+                const height = Math.max(20, minutesFromTime(hf) - minutesFromTime(hi));
+                blocks.push(`
+                    <div class="sched-block sched-maint" style="top:${top}px;height:${height}px;" data-kind="mantenimiento" data-qid="${qid}">
+                        <div class="sched-title">${String(b.TIPO || 'MANTENIMIENTO')}</div>
+                        <div class="sched-meta">${b.MOTIVO || ''}</div>
+                        <div class="sched-meta">${minutesToTimeStr(minutesFromTime(hi))}-${minutesToTimeStr(minutesFromTime(hf))}</div>
+                    </div>
+                `);
+            });
 
-        reservas
+        reservasRaw
             .filter(r => Number(r.ID_QUIROFANO) === qid)
             .forEach(r => {
                 const hi = parseDateValue(r.HORA_INICIO);
                 const hf = parseDateValue(r.HORA_FIN);
-                const fr = parseDateValue(r.FECHA_RESERVA);
-                if (!hi || !hf || !fr) return;
-                if (toDateStr(fr) !== fecha) return;
+                if (!hi || !hf) return;
+                if (dateStrFromValue(r.FECHA_RESERVA) !== fecha) return;
 
                 const top = Math.max(0, minutesFromTime(hi) - startMin);
                 const height = Math.max(24, minutesFromTime(hf) - minutesFromTime(hi));
@@ -1028,10 +1059,17 @@ async function programarDesdeSolicitud(idReserva) {
     const hi = parseDateValue(r.HORA_INICIO);
     const hf = parseDateValue(r.HORA_FIN);
     reservaPreset = {
+        id_reserva: Number(r.ID_RESERVA),
         fecha,
         hora_inicio: hi ? minutesToTimeStr(minutesFromTime(hi)) : '08:00',
         hora_fin: hf ? minutesToTimeStr(minutesFromTime(hf)) : '09:00',
-        id_quirofano: r.ID_QUIROFANO ? Number(r.ID_QUIROFANO) : undefined
+        id_paciente: r.ID_PACIENTE ? Number(r.ID_PACIENTE) : undefined,
+        id_medico: r.ID_MEDICO ? Number(r.ID_MEDICO) : undefined,
+        id_quirofano: r.ID_QUIROFANO ? Number(r.ID_QUIROFANO) : undefined,
+        id_especialidad: r.ID_ESPECIALIDAD ? Number(r.ID_ESPECIALIDAD) : undefined,
+        tipo_cirugia: r.TIPO_CIRUGIA || '',
+        descripcion: r.DESCRIPCION_NECESIDAD || '',
+        prioridad: r.PRIORIDAD || 'NORMAL'
     };
     abrirModalReserva();
 }
@@ -1315,9 +1353,12 @@ async function cargarReservas() {
                 <td>${r.TIPO_CIRUGIA}</td>
                 <td>${r.MEDICO}</td>
                 <td>${r.QUIROFANO}</td>
-                <td>${new Date(r.FECHA_RESERVA).toLocaleDateString()}</td>
+                <td>${dateStrFromValue(r.FECHA_RESERVA) || ''}</td>
                 <td><span class="badge badge-${r.ESTADO.toLowerCase()}">${r.ESTADO}</span></td>
-                <td>${r.ESTADO === 'SOLICITADA' ? `<button onclick="actualizarEstadoReserva(${r.ID_RESERVA}, 'APROBADA')" class="btn-primary">Aprobar</button>` : ''}</td>
+                <td>
+                    ${r.ESTADO === 'SOLICITADA' ? `<button onclick="programarReserva(${r.ID_RESERVA})" class="btn-primary">Programar</button>` : ''}
+                    <button onclick="verDisponibilidadReserva(${r.ID_RESERVA})" class="btn-outline">Disponibilidad</button>
+                </td>
             </tr>
         `).join('');
     } catch (err) {
@@ -1325,15 +1366,60 @@ async function cargarReservas() {
     }
 }
 
+function programarReserva(idReserva) {
+    const r = reservasCache.find(x => Number(x.ID_RESERVA) === Number(idReserva));
+    if (!r) return;
+    const hi = parseDateValue(r.HORA_INICIO);
+    const hf = parseDateValue(r.HORA_FIN);
+    const fecha = dateStrFromValue(r.FECHA_RESERVA) || getTodayStr();
+    reservaPreset = {
+        id_reserva: Number(r.ID_RESERVA),
+        fecha,
+        hora_inicio: hi ? minutesToTimeStr(minutesFromTime(hi)) : '08:00',
+        hora_fin: hf ? minutesToTimeStr(minutesFromTime(hf)) : '09:00',
+        id_paciente: r.ID_PACIENTE ? Number(r.ID_PACIENTE) : undefined,
+        id_medico: r.ID_MEDICO ? Number(r.ID_MEDICO) : undefined,
+        id_quirofano: r.ID_QUIROFANO ? Number(r.ID_QUIROFANO) : undefined,
+        id_especialidad: r.ID_ESPECIALIDAD ? Number(r.ID_ESPECIALIDAD) : undefined,
+        tipo_cirugia: r.TIPO_CIRUGIA || '',
+        descripcion: r.DESCRIPCION_NECESIDAD || '',
+        prioridad: r.PRIORIDAD || 'NORMAL'
+    };
+    abrirModalReserva();
+}
+
+function verDisponibilidadReserva(idReserva) {
+    const r = reservasCache.find(x => Number(x.ID_RESERVA) === Number(idReserva));
+    if (!r) return;
+    const hi = parseDateValue(r.HORA_INICIO);
+    const hf = parseDateValue(r.HORA_FIN);
+    const fecha = dateStrFromValue(r.FECHA_RESERVA) || getTodayStr();
+    reservaPreset = {
+        id_reserva: Number(r.ID_RESERVA),
+        fecha,
+        hora_inicio: hi ? minutesToTimeStr(minutesFromTime(hi)) : '08:00',
+        hora_fin: hf ? minutesToTimeStr(minutesFromTime(hf)) : '09:00',
+        id_paciente: r.ID_PACIENTE ? Number(r.ID_PACIENTE) : undefined,
+        id_medico: r.ID_MEDICO ? Number(r.ID_MEDICO) : undefined,
+        id_quirofano: r.ID_QUIROFANO ? Number(r.ID_QUIROFANO) : undefined,
+        id_especialidad: r.ID_ESPECIALIDAD ? Number(r.ID_ESPECIALIDAD) : undefined,
+        tipo_cirugia: r.TIPO_CIRUGIA || '',
+        descripcion: r.DESCRIPCION_NECESIDAD || '',
+        prioridad: r.PRIORIDAD || 'NORMAL'
+    };
+    abrirModalReserva();
+}
+
 async function abrirModalReserva() {
     const modal = document.getElementById('modal-reserva');
     if (!modal) return;
     const preset = reservaPreset;
 
-    document.getElementById('modal-titulo').textContent = 'Nueva Reserva';
-    document.getElementById('id_reserva').value = '';
-    document.getElementById('tipo_cirugia').value = '';
-    document.getElementById('descripcion').value = '';
+    const isEdit = Boolean(preset?.id_reserva);
+    document.getElementById('modal-titulo').textContent = isEdit ? 'Programar Reserva' : 'Nueva Reserva';
+    document.getElementById('id_reserva').value = preset?.id_reserva ? String(preset.id_reserva) : '';
+    document.getElementById('tipo_cirugia').value = preset?.tipo_cirugia || '';
+    document.getElementById('descripcion').value = preset?.descripcion || '';
     const prioridadEl = document.getElementById('prioridad');
     if (prioridadEl) prioridadEl.value = 'NORMAL';
     document.getElementById('fecha').value = preset?.fecha || '';
@@ -1345,7 +1431,7 @@ async function abrirModalReserva() {
         const [pacientes, medicos, quirofanos, especialidades] = await Promise.all([
             client.get('/pacientes'),
             client.get('/medicos'),
-            client.get('/quirofanos/disponibles'),
+            client.get('/quirofanos'),
             client.get('/especialidades')
         ]);
 
@@ -1365,6 +1451,17 @@ async function abrirModalReserva() {
         if (preset?.id_especialidad && selEspecialidad) selEspecialidad.value = String(preset.id_especialidad);
         if (preset?.prioridad && prioridadEl) prioridadEl.value = preset.prioridad;
         reservaPreset = null;
+        await updateReservaDisponibilidad();
+    });
+
+    bindOnce('reserva-disponibilidad', () => {
+        const fields = ['id_medico', 'id_quirofano', 'fecha', 'hora_inicio', 'hora_fin'];
+        fields.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('change', updateReservaDisponibilidad);
+            el.addEventListener('input', updateReservaDisponibilidad);
+        });
     });
 
     bindOnce('reserva-form', () => {
@@ -1372,6 +1469,7 @@ async function abrirModalReserva() {
         if (!form) return;
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const id_reserva = document.getElementById('id_reserva').value;
             const id_paciente = Number(document.getElementById('id_paciente').value);
             const id_medico = Number(document.getElementById('id_medico').value);
             const id_quirofano = Number(document.getElementById('id_quirofano').value);
@@ -1384,9 +1482,13 @@ async function abrirModalReserva() {
             const hora_fin = document.getElementById('hora_fin').value;
 
             try {
-                await client.post('/reservas', { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, prioridad, fecha, hora_inicio, hora_fin });
+                if (id_reserva) {
+                    await client.put(`/reservas/asignar/${id_reserva}`, { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, prioridad, fecha, hora_inicio, hora_fin });
+                } else {
+                    await client.post('/reservas', { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, prioridad, fecha, hora_inicio, hora_fin });
+                }
                 cerrarModalReserva();
-                showToast('Reserva guardada', 'success');
+                showToast(id_reserva ? 'Reserva programada' : 'Reserva guardada', 'success');
                 const body = document.getElementById('reservas-body');
                 if (body) {
                     await cargarReservas();
@@ -1398,6 +1500,49 @@ async function abrirModalReserva() {
             }
         });
     });
+}
+
+async function updateReservaDisponibilidad() {
+    const box = document.getElementById('disponibilidad-box');
+    const btn = document.querySelector('#reserva-form button[type="submit"]');
+    if (!box) return;
+
+    const fecha = document.getElementById('fecha')?.value;
+    const hora_inicio = document.getElementById('hora_inicio')?.value;
+    const hora_fin = document.getElementById('hora_fin')?.value;
+    const id_medico = Number(document.getElementById('id_medico')?.value);
+    const id_quirofano = Number(document.getElementById('id_quirofano')?.value);
+
+    if (!fecha || !hora_inicio || !hora_fin || !id_medico || !id_quirofano) {
+        box.style.display = 'none';
+        if (btn) btn.disabled = false;
+        return;
+    }
+
+    try {
+        const [q, m] = await Promise.all([
+            client.get(`/quirofanos/disponibilidad?fecha=${encodeURIComponent(fecha)}&hora_inicio=${encodeURIComponent(hora_inicio)}&hora_fin=${encodeURIComponent(hora_fin)}`),
+            client.get(`/medicos/disponibilidad?fecha=${encodeURIComponent(fecha)}&hora_inicio=${encodeURIComponent(hora_inicio)}&hora_fin=${encodeURIComponent(hora_fin)}`)
+        ]);
+
+        const occQ = new Set((q?.ocupados_por_reserva || []).map(x => Number(x.ID_QUIROFANO)));
+        const blkQ = new Set((q?.bloqueados_por_mantenimiento || []).map(x => Number(x.ID_QUIROFANO)));
+        const occM = new Set((m?.ocupados_por_reserva || []).map(x => Number(x.ID_MEDICO)));
+
+        const qOk = !occQ.has(id_quirofano) && !blkQ.has(id_quirofano);
+        const mOk = !occM.has(id_medico);
+
+        const parts = [];
+        parts.push(`<div class="${qOk ? 'ok' : 'warn'}">Quirófano: ${qOk ? 'DISPONIBLE' : (blkQ.has(id_quirofano) ? 'MANTENIMIENTO/BLOQUEO' : 'OCUPADO')}</div>`);
+        parts.push(`<div class="${mOk ? 'ok' : 'warn'}">Médico: ${mOk ? 'DISPONIBLE' : 'OCUPADO'}</div>`);
+        box.innerHTML = parts.join('');
+        box.style.display = 'block';
+        if (btn) btn.disabled = !(qOk && mOk);
+    } catch (err) {
+        box.innerHTML = `<div class="warn">No se pudo validar disponibilidad.</div>`;
+        box.style.display = 'block';
+        if (btn) btn.disabled = false;
+    }
 }
 
 function cerrarModalReserva() {
@@ -1772,16 +1917,57 @@ function cambiarEstadoQ(idQuirofano, estadoActual) {
     const nombreEl = document.getElementById('quirofano-nombre');
     if (nombreEl) nombreEl.textContent = `Quirófano #${idQuirofano}`;
     modal.style.display = 'block';
+    const maintBox = document.getElementById('mantenimiento-fields');
+    const mantFecha = document.getElementById('mant_fecha');
+    const mantInicio = document.getElementById('mant_inicio');
+    const mantFin = document.getElementById('mant_fin');
+    const mantMotivo = document.getElementById('mant_motivo');
+    const estadoSel = document.getElementById('estado');
+    if (mantFecha && !mantFecha.value) mantFecha.value = getTodayStr();
+    if (mantInicio && !mantInicio.value) {
+        const now = new Date();
+        mantInicio.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    }
+    if (mantFin && !mantFin.value) {
+        const now = new Date();
+        now.setHours(now.getHours() + 2);
+        mantFin.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    }
+    if (maintBox && estadoSel) {
+        maintBox.style.display = estadoSel.value === 'MANTENIMIENTO' ? 'block' : 'none';
+    }
 
     bindOnce('quirofano-form', () => {
         const form = document.getElementById('quirofano-form');
         if (!form) return;
+        const estadoEl = document.getElementById('estado');
+        if (estadoEl) {
+            estadoEl.addEventListener('change', () => {
+                const box = document.getElementById('mantenimiento-fields');
+                if (!box) return;
+                box.style.display = estadoEl.value === 'MANTENIMIENTO' ? 'block' : 'none';
+            });
+        }
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const id = document.getElementById('id_quirofano').value;
             const estado = document.getElementById('estado').value;
             try {
-                await client.put(`/quirofanos/estado/${id}`, { estado });
+                if (estado === 'MANTENIMIENTO') {
+                    const f = document.getElementById('mant_fecha')?.value || getTodayStr();
+                    const hi = document.getElementById('mant_inicio')?.value || '08:00';
+                    const hf = document.getElementById('mant_fin')?.value || '10:00';
+                    const motivo = document.getElementById('mant_motivo')?.value || '';
+                    await client.post('/quirofanos/bloqueos', {
+                        id_quirofano: Number(id),
+                        tipo: 'MANTENIMIENTO',
+                        inicio: `${f} ${hi}`,
+                        fin: `${f} ${hf}`,
+                        motivo
+                    });
+                } else {
+                    await client.put(`/quirofanos/estado/${id}`, { estado });
+                }
                 cerrarModalQuirofano();
                 await cargarQuirofanos();
             } catch (err) {

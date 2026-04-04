@@ -32,6 +32,26 @@
                         <option value="MANTENIMIENTO">Mantenimiento</option>
                     </select>
                 </div>
+                <div id="mantenimiento-fields" style="display:none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mant_fecha">Fecha</label>
+                            <input type="date" id="mant_fecha" name="mant_fecha">
+                        </div>
+                        <div class="form-group">
+                            <label for="mant_inicio">Inicio</label>
+                            <input type="time" id="mant_inicio" name="mant_inicio">
+                        </div>
+                        <div class="form-group">
+                            <label for="mant_fin">Fin</label>
+                            <input type="time" id="mant_fin" name="mant_fin">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="mant_motivo">Motivo</label>
+                        <input type="text" id="mant_motivo" name="mant_motivo" placeholder="Ej: Limpieza profunda / Reparación / Calibración">
+                    </div>
+                </div>
                 <button type="submit" class="btn-primary btn-block">Guardar</button>
             </form>
         </div>

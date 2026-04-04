@@ -3,6 +3,38 @@ const router = express.Router();
 const { getConnection } = require('../config/db');
 const { verificarToken } = require('../middleware/auth');
 
+// Disponibilidad por rango horario (devuelve médicos ocupados)
+router.get('/disponibilidad', verificarToken, async (req, res) => {
+  const { fecha, hora_inicio, hora_fin } = req.query;
+  if (!fecha || !hora_inicio || !hora_fin) {
+    return res.status(400).json({ error: 'fecha, hora_inicio y hora_fin son requeridos' });
+  }
+  let conn;
+  try {
+    conn = await getConnection();
+    const inicioTs = `${fecha} ${hora_inicio}`;
+    const finTs = `${fecha} ${hora_fin}`;
+    const result = await conn.execute(
+      `SELECT r.id_medico, COUNT(*) cantidad
+       FROM RESERVAS r
+       WHERE r.estado IN ('APROBADA','EN_CURSO')
+         AND TRUNC(r.fecha_reserva) = TO_DATE(:fecha, 'YYYY-MM-DD')
+         AND r.hora_inicio < TO_DATE(:fin_ts, 'YYYY-MM-DD HH24:MI')
+         AND r.hora_fin > TO_DATE(:inicio_ts, 'YYYY-MM-DD HH24:MI')
+       GROUP BY r.id_medico`,
+      { fecha, inicio_ts: inicioTs, fin_ts: finTs }
+    );
+    res.json({
+      rango: { fecha, hora_inicio, hora_fin },
+      ocupados_por_reserva: result.rows || []
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (conn) await conn.close();
+  }
+});
+
 // Obtener todos los médicos
 router.get('/', verificarToken, async (req, res) => {
   let conn;

@@ -113,9 +113,10 @@ router.put('/estado/:id', verificarToken, async (req, res) => {
     await conn.commit();
     res.json({ mensaje: 'Estado de reserva actualizado' });
   } catch (err) {
-    if (String(err.message || '').includes('ORA-20001')) {
+    const msg = String(err.message || '');
+    if (msg.includes('ORA-20001') || msg.includes('ORA-20003') || msg.includes('ORA-20004')) {
       return res.status(409).json({
-        error: 'Conflicto: el quirófano ya tiene una reserva en ese horario. Reprograma o asigna otro quirófano.'
+        error: 'Conflicto: el quirófano o el médico no están disponibles en ese horario. Reprograma o asigna otro.'
       });
     }
     res.status(500).json({ error: err.message });
@@ -146,6 +147,53 @@ router.put('/reprogramar/:id', verificarToken, async (req, res) => {
     );
     res.json({ mensaje: 'Reserva reprogramada exitosamente' });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (conn) await conn.close();
+  }
+});
+
+// Asignar/Programar reserva (cambia médico/quirofano/horario)
+router.put('/asignar/:id', verificarToken, async (req, res) => {
+  const { id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, fecha, hora_inicio, hora_fin, prioridad } = req.body;
+  let conn;
+  try {
+    conn = await getConnection();
+    await conn.execute(
+      `UPDATE RESERVAS SET
+         id_medico = :id_medico,
+         id_quirofano = :id_quirofano,
+         id_especialidad = :id_especialidad,
+         tipo_cirugia = :tipo_cirugia,
+         descripcion_necesidad = :descripcion,
+         fecha_reserva = TO_DATE(:fecha, 'YYYY-MM-DD'),
+         hora_inicio = TO_DATE(:inicio, 'YYYY-MM-DD HH24:MI'),
+         hora_fin = TO_DATE(:fin, 'YYYY-MM-DD HH24:MI'),
+         prioridad = :prioridad,
+         estado = 'APROBADA'
+       WHERE id_reserva = :id`,
+      {
+        id_medico,
+        id_quirofano,
+        id_especialidad,
+        tipo_cirugia,
+        descripcion,
+        fecha,
+        inicio: `${fecha} ${hora_inicio}`,
+        fin: `${fecha} ${hora_fin}`,
+        prioridad: prioridad || 'NORMAL',
+        id: req.params.id
+      }
+    );
+    await conn.commit();
+    res.json({ mensaje: 'Reserva programada' });
+  } catch (err) {
+    const msg = String(err.message || '');
+    if (msg.includes('ORA-20001') || msg.includes('ORA-20003') || msg.includes('ORA-20004')) {
+      return res.status(409).json({
+        error: 'Conflicto: el quirófano o el médico no están disponibles en ese horario. Ajusta horario o asigna otro.'
+      });
+    }
     res.status(500).json({ error: err.message });
   } finally {
     if (conn) await conn.close();

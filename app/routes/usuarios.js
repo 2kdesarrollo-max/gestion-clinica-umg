@@ -51,6 +51,19 @@ router.put('/:id', verificarToken, verificarPermiso('usuarios', 'write'), async 
   let conn;
   try {
     conn = await getConnection();
+    if (id_perfil) {
+      const q = await conn.execute(
+        `SELECT nombre FROM PERFILES_SISTEMA WHERE id_perfil = :id`,
+        { id: id_perfil }
+      );
+      const perfilNombre = q.rows && q.rows[0] ? String(q.rows[0].NOMBRE || '') : '';
+      if (perfilNombre.toUpperCase() === 'SUPER_ADMIN' || perfilNombre.toUpperCase() === 'SUPERADMIN') {
+        const solicitante = String(req.usuario?.perfil || '');
+        if (solicitante.toUpperCase() !== 'SUPER_ADMIN' && solicitante.toUpperCase() !== 'SUPERADMIN') {
+          return res.status(403).json({ error: 'Solo SUPER_ADMIN puede asignar perfil SUPER_ADMIN' });
+        }
+      }
+    }
     await conn.execute(
       `UPDATE USUARIOS_SISTEMA SET 
         nombre = :nombre, apellido = :apellido, email = :email, id_perfil = :id_perfil
@@ -85,8 +98,8 @@ router.put('/estado/:id', verificarToken, verificarPermiso('usuarios', 'write'),
   }
 });
 
-// Eliminar usuario
-router.delete('/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+// Eliminar usuario (solo SUPER_ADMIN)
+router.delete('/:id', verificarToken, verificarPerfil('SUPER_ADMIN'), async (req, res) => {
   let conn;
   try {
     conn = await getConnection();

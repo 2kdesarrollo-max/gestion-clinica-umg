@@ -832,6 +832,25 @@ tr:hover { background-color: #f9f9f9; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 
+.availability-box {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(16,24,40,0.12);
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: blur(10px);
+    font-weight: 650;
+    color: rgba(31,41,55,0.85);
+}
+
+.availability-box .warn {
+    color: rgba(220,38,38,0.92);
+}
+
+.availability-box .ok {
+    color: rgba(5,150,105,0.92);
+}
+
 .priv-table-wrap {
     margin-top: 10px;
     border: 1px solid rgba(16,24,40,0.10);

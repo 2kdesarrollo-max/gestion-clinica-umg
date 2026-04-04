@@ -54,7 +54,7 @@ function hasModuleWrite(privs, modulo) {
   const m = String(modulo || '').trim().toLowerCase();
   if (!m) return false;
   const tokens = parsePrivilegios(privs);
-  return tokens.includes(m) || tokens.includes(`${m}:w`);
+  return tokens.includes(`${m}:w`);
 }
 
 async function verificarToken(req, res, next) {
@@ -109,7 +109,7 @@ function verificarPermiso(modulo, accion) {
     const mode = String(process.env.PERMISOS_MODE || 'STRICT').toUpperCase();
     if (mode === 'OPEN') return next();
     const perfil = String(req.usuario?.perfil || '');
-    if (perfil.toUpperCase() === 'ADMINISTRADOR') return next();
+    if (perfil.toUpperCase() === 'SUPER_ADMIN' || perfil.toUpperCase() === 'SUPERADMIN') return next();
 
     const privs = req.usuario?.privilegios;
     const a = String(accion || 'read').toLowerCase();

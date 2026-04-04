@@ -24,6 +24,7 @@ CREATE OR REPLACE PROCEDURE SP_RESERVAR_QUIROFANO (
   v_estado VARCHAR2(20);
   v_conf_quirofano NUMBER := 0;
   v_conf_medico NUMBER := 0;
+  v_conf_bloqueo NUMBER := 0;
   v_es_paciente NUMBER := 0;
 BEGIN
   v_id := SEQ_RESERVAS.NEXTVAL;
@@ -44,6 +45,12 @@ BEGIN
       AND TRUNC(r.fecha_reserva) = TRUNC(p_fecha)
       AND (r.hora_inicio < p_hora_fin AND r.hora_fin > p_hora_inicio);
 
+    SELECT COUNT(*) INTO v_conf_bloqueo
+    FROM QUIROFANO_BLOQUEOS b
+    WHERE b.id_quirofano = p_id_quirofano
+      AND b.activo = 1
+      AND (b.inicio < p_hora_fin AND b.fin > p_hora_inicio);
+
     SELECT COUNT(*) INTO v_conf_medico
     FROM RESERVAS r
     WHERE r.id_medico = p_id_medico
@@ -54,7 +61,7 @@ BEGIN
 
   IF v_es_paciente = 1 THEN
     v_estado := 'SOLICITADA';
-  ELSIF v_conf_quirofano = 0 AND v_conf_medico = 0 AND v_prioridad IN ('NORMAL','URGENTE') THEN
+  ELSIF v_conf_quirofano = 0 AND v_conf_bloqueo = 0 AND v_conf_medico = 0 AND v_prioridad IN ('NORMAL','URGENTE') THEN
     v_estado := 'APROBADA';
   ELSE
     v_estado := 'SOLICITADA';
@@ -71,8 +78,12 @@ BEGIN
   INSERT INTO VALIDACIONES VALUES (
     SEQ_VALIDACIONES.NEXTVAL, v_id,
     'QUIROFANO',
-    CASE WHEN v_conf_quirofano = 0 THEN 'OK' ELSE 'FAIL' END,
-    CASE WHEN v_conf_quirofano = 0 THEN 'Quirófano disponible' ELSE 'Conflicto de quirófano en ese horario' END,
+    CASE WHEN v_conf_quirofano = 0 AND v_conf_bloqueo = 0 THEN 'OK' ELSE 'FAIL' END,
+    CASE
+      WHEN v_conf_quirofano > 0 THEN 'Conflicto de quirófano en ese horario'
+      WHEN v_conf_bloqueo > 0 THEN 'Quirófano en mantenimiento/bloqueado en ese horario'
+      ELSE 'Quirófano disponible'
+    END,
     SYSDATE
   );
   SAVEPOINT SP_VALIDACION;

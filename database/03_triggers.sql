@@ -64,6 +64,7 @@ COMPOUND TRIGGER
   TYPE t_reserva IS RECORD (
     id_reserva   SUPERADMIN.RESERVAS.id_reserva%TYPE,
     id_quirofano SUPERADMIN.RESERVAS.id_quirofano%TYPE,
+    id_medico    SUPERADMIN.RESERVAS.id_medico%TYPE,
     fecha_res    SUPERADMIN.RESERVAS.fecha_reserva%TYPE,
     hora_ini     SUPERADMIN.RESERVAS.hora_inicio%TYPE,
     hora_fin     SUPERADMIN.RESERVAS.hora_fin%TYPE,
@@ -86,6 +87,7 @@ COMPOUND TRIGGER
       g_idx := g_idx + 1;
       g_reservas(g_idx).id_reserva := :NEW.id_reserva;
       g_reservas(g_idx).id_quirofano := :NEW.id_quirofano;
+      g_reservas(g_idx).id_medico := :NEW.id_medico;
       g_reservas(g_idx).fecha_res := :NEW.fecha_reserva;
       g_reservas(g_idx).hora_ini := :NEW.hora_inicio;
       g_reservas(g_idx).hora_fin := :NEW.hora_fin;
@@ -95,6 +97,8 @@ COMPOUND TRIGGER
 
   AFTER STATEMENT IS
     v_count NUMBER;
+    v_block NUMBER;
+    v_medico NUMBER;
   BEGIN
     FOR i IN 1..g_idx LOOP
       EXIT WHEN NOT g_reservas.EXISTS(i);
@@ -108,6 +112,28 @@ COMPOUND TRIGGER
 
       IF v_count > 0 THEN
         RAISE_APPLICATION_ERROR(-20001, 'El quirofano ya tiene una reserva en ese horario.');
+      END IF;
+
+      SELECT COUNT(*) INTO v_block
+      FROM SUPERADMIN.QUIROFANO_BLOQUEOS b
+      WHERE b.id_quirofano = g_reservas(i).id_quirofano
+        AND b.activo = 1
+        AND (b.inicio < g_reservas(i).hora_fin AND b.fin > g_reservas(i).hora_ini);
+
+      IF v_block > 0 THEN
+        RAISE_APPLICATION_ERROR(-20003, 'El quirofano tiene un mantenimiento/bloqueo en ese horario.');
+      END IF;
+
+      SELECT COUNT(*) INTO v_medico
+      FROM SUPERADMIN.RESERVAS r
+      WHERE r.id_medico = g_reservas(i).id_medico
+        AND r.id_reserva <> g_reservas(i).id_reserva
+        AND r.estado IN ('APROBADA','EN_CURSO')
+        AND TRUNC(r.fecha_reserva) = TRUNC(g_reservas(i).fecha_res)
+        AND (r.hora_inicio < g_reservas(i).hora_fin AND r.hora_fin > g_reservas(i).hora_ini);
+
+      IF v_medico > 0 THEN
+        RAISE_APPLICATION_ERROR(-20004, 'El medico ya tiene una reserva en ese horario.');
       END IF;
     END LOOP;
   END AFTER STATEMENT;
