@@ -1566,6 +1566,26 @@ function abrirModalPerfil() {
     document.querySelectorAll('input[name="privilegios"]').forEach(cb => { cb.checked = true; });
     modal.style.display = 'block';
 
+    bindOnce('perfil-perm-ui', () => {
+        modal.addEventListener('change', (e) => {
+            const t = e.target;
+            if (!(t instanceof HTMLInputElement)) return;
+            if (t.name !== 'privilegios') return;
+            const mod = t.dataset.mod;
+            const perm = t.dataset.perm;
+            if (!mod || !perm) return;
+
+            if (perm === 'w' && t.checked) {
+                const r = modal.querySelector(`input[name="privilegios"][data-mod="${mod}"][data-perm="r"]`);
+                if (r instanceof HTMLInputElement) r.checked = true;
+            }
+            if (perm === 'r' && !t.checked) {
+                const w = modal.querySelector(`input[name="privilegios"][data-mod="${mod}"][data-perm="w"]`);
+                if (w instanceof HTMLInputElement) w.checked = false;
+            }
+        });
+    });
+
     bindOnce('perfil-form', () => {
         const form = document.getElementById('perfil-form');
         if (!form) return;

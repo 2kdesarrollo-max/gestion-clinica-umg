@@ -832,6 +832,46 @@ tr:hover { background-color: #f9f9f9; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 
+.priv-table-wrap {
+    margin-top: 10px;
+    border: 1px solid rgba(16,24,40,0.10);
+    border-radius: 12px;
+    overflow: auto;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(10px);
+}
+
+.priv-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 520px;
+}
+
+.priv-table th, .priv-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(16,24,40,0.08);
+}
+
+.priv-table th {
+    position: sticky;
+    top: 0;
+    background: rgba(255,255,255,0.92);
+    z-index: 1;
+    font-weight: 800;
+    color: rgba(31,41,55,0.75);
+}
+
+.priv-table td.center, .priv-table th.center {
+    text-align: center;
+    width: 140px;
+}
+
+.priv-table input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-color);
+}
+
 /* Buttons */
 .btn-primary { background: var(--accent-color); color: var(--white); border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
 .btn-danger { background: var(--danger); color: var(--white); border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }

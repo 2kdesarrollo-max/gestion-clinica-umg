@@ -35,41 +35,78 @@
                 <div class="form-group"><label for="descripcion">Descripción</label><input type="text" id="descripcion" name="descripcion" required></div>
                 
                 <label>Privilegios:</label>
-                <div class="privilegios-grid" id="privilegios-grid">
-                    <label><input type="checkbox" name="privilegios" value="dashboard:r"> Dashboard (R)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="pacientes:r"> Pacientes (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="pacientes:w"> Pacientes (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="medicos:r"> Médicos (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="medicos:w"> Médicos (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="especialidades:r"> Especialidades (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="especialidades:w"> Especialidades (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="quirofanos:r"> Quirófanos (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="quirofanos:w"> Quirófanos (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="equipos:r"> Equipos (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="equipos:w"> Equipos (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="reservas:r"> Reservas (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="reservas:w"> Reservas (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="emergencias:r"> Emergencias (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="emergencias:w"> Emergencias (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="reportes:r"> Reportes (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="reportes:w"> Reportes (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="usuarios:r"> Usuarios (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="usuarios:w"> Usuarios (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="perfiles:r"> Perfiles (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="perfiles:w"> Perfiles (W)</label>
-
-                    <label><input type="checkbox" name="privilegios" value="monitoreo:r"> Monitoreo (R)</label>
-                    <label><input type="checkbox" name="privilegios" value="monitoreo:w"> Monitoreo (W)</label>
+                <div class="priv-table-wrap">
+                    <table class="priv-table" aria-label="Privilegios por módulo">
+                        <thead>
+                            <tr>
+                                <th>Módulo</th>
+                                <th class="center">Lectura (R)</th>
+                                <th class="center">Escritura (W)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="privilegios-grid">
+                            <tr>
+                                <td>Dashboard</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="dashboard:r" data-mod="dashboard" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="dashboard:w" data-mod="dashboard" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Pacientes</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="pacientes:r" data-mod="pacientes" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="pacientes:w" data-mod="pacientes" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Médicos</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="medicos:r" data-mod="medicos" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="medicos:w" data-mod="medicos" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Especialidades</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="especialidades:r" data-mod="especialidades" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="especialidades:w" data-mod="especialidades" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Quirófanos</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="quirofanos:r" data-mod="quirofanos" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="quirofanos:w" data-mod="quirofanos" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Equipos</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="equipos:r" data-mod="equipos" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="equipos:w" data-mod="equipos" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Reservas</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="reservas:r" data-mod="reservas" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="reservas:w" data-mod="reservas" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Emergencias</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="emergencias:r" data-mod="emergencias" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="emergencias:w" data-mod="emergencias" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Reportes</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="reportes:r" data-mod="reportes" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="reportes:w" data-mod="reportes" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Usuarios</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="usuarios:r" data-mod="usuarios" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="usuarios:w" data-mod="usuarios" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Perfiles</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="perfiles:r" data-mod="perfiles" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="perfiles:w" data-mod="perfiles" data-perm="w"></td>
+                            </tr>
+                            <tr>
+                                <td>Monitoreo</td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="monitoreo:r" data-mod="monitoreo" data-perm="r"></td>
+                                <td class="center"><input type="checkbox" name="privilegios" value="monitoreo:w" data-mod="monitoreo" data-perm="w"></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 <button type="submit" class="btn-primary btn-block">Guardar</button>
             </form>
