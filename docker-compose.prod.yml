@@ -23,6 +23,9 @@ services:
     container_name: gci-caddy
     depends_on:
       - api
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
     ports:
       - "80:80"
       - "443:443"

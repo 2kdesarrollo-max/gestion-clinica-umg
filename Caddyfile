@@ -1,8 +1,8 @@
 {
-  email admin@example.com
+  email {$ACME_EMAIL}
 }
 
-your-domain.com {
+{$DOMAIN} {
   encode zstd gzip
   reverse_proxy api:3001
 }
