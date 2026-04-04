@@ -517,19 +517,45 @@ function initSidebar(privilegios) {
             const user = JSON.parse(localStorage.getItem('admin_user') || 'null');
             container.innerHTML = `
                 <div class="sidebar-header">
-                    <img src="/imagenes/emojihospital.png" alt="Logo" style="height: 60px;">
-                    <h2>Admin GCI-UMG</h2>
+                    <div class="sidebar-brand">
+                        <img src="/imagenes/emojihospital.png" alt="Logo">
+                        <div class="sidebar-brand-text">
+                            <h2>Admin GCI-UMG</h2>
+                        </div>
+                        <button type="button" class="sidebar-toggle" aria-label="Abrir menú" onclick="toggleSidebar()">☰</button>
+                    </div>
+                    <div class="sidebar-user">
+                        <div class="sidebar-user-name">${user?.nombre || 'Usuario Admin'}</div>
+                        <div class="sidebar-user-role">${user?.perfil || ''}</div>
+                    </div>
                 </div>
                 <nav id="sidebar-nav"></nav>
                 <div class="sidebar-footer">
-                    <div id="user-info">
-                        <p id="user-name">${user?.nombre || 'Usuario Admin'}</p>
-                        <p id="user-role">${user?.perfil || ''}</p>
-                    </div>
                     <button onclick="logoutAdmin()" class="btn-logout">Cerrar Sesión</button>
                 </div>
             `;
             nav = container.querySelector('#sidebar-nav');
+
+            let backdrop = document.getElementById('sidebar-backdrop');
+            if (!backdrop) {
+                backdrop = document.createElement('div');
+                backdrop.id = 'sidebar-backdrop';
+                backdrop.className = 'sidebar-backdrop';
+                backdrop.addEventListener('click', () => setSidebarOpen(false));
+                document.body.appendChild(backdrop);
+            }
+
+            let fab = document.getElementById('sidebar-fab');
+            if (!fab) {
+                fab = document.createElement('button');
+                fab.id = 'sidebar-fab';
+                fab.className = 'sidebar-fab';
+                fab.type = 'button';
+                fab.setAttribute('aria-label', 'Abrir menú');
+                fab.textContent = '☰';
+                fab.addEventListener('click', () => toggleSidebar());
+                document.body.appendChild(fab);
+            }
         }
     }
     if (!nav) return;
@@ -560,6 +586,24 @@ function initSidebar(privilegios) {
                 <span class="nav-label">${m.label}</span>
             </a>
         `).join('');
+
+    nav.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', () => setSidebarOpen(false));
+    });
+}
+
+function setSidebarOpen(open) {
+    const sidebar = document.getElementById('sidebar-container');
+    if (!sidebar) return;
+    sidebar.classList.toggle('open', Boolean(open));
+    const backdrop = document.getElementById('sidebar-backdrop');
+    if (backdrop) backdrop.classList.toggle('show', Boolean(open));
+}
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar-container');
+    if (!sidebar) return;
+    setSidebarOpen(!sidebar.classList.contains('open'));
 }
 
 async function cargarEspecialidadesFiltro() {
