@@ -4,6 +4,8 @@ const { getConnection } = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+const DEFAULT_PRIVILEGIOS = 'dashboard,pacientes,medicos,especialidades,quirofanos,equipos,reservas,emergencias,reportes,usuarios,perfiles,monitoreo';
+
 // Login portal hospital
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -32,13 +34,14 @@ router.post('/login', async (req, res) => {
       { id: usuario.ID_USUARIO }
     );
     await conn.commit();
+    const privilegios = usuario.PRIVILEGIOS || DEFAULT_PRIVILEGIOS;
     const token = jwt.sign(
       {
         id: usuario.ID_USUARIO,
         username: usuario.USERNAME,
         nombre: usuario.NOMBRE + ' ' + usuario.APELLIDO,
         perfil: usuario.PERFIL,
-        privilegios: usuario.PRIVILEGIOS
+        privilegios
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES }
@@ -50,7 +53,7 @@ router.post('/login', async (req, res) => {
         nombre: usuario.NOMBRE + ' ' + usuario.APELLIDO,
         username: usuario.USERNAME,
         perfil: usuario.PERFIL,
-        privilegios: usuario.PRIVILEGIOS ? usuario.PRIVILEGIOS.split(',') : []
+        privilegios: privilegios ? String(privilegios).split(',').map(s => s.trim()).filter(Boolean) : []
       }
     });
   } catch (err) {

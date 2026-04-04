@@ -5,6 +5,60 @@
 const API_URL = '/api';
 let reservasCache = [];
 
+function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+}
+
+function initFloatingModals() {
+    let drag = null;
+
+    function onMove(e) {
+        if (!drag) return;
+        const dx = e.clientX - drag.startX;
+        const dy = e.clientY - drag.startY;
+        const w = drag.el.offsetWidth;
+        const h = drag.el.offsetHeight;
+
+        const left = clamp(drag.startLeft + dx, 8, window.innerWidth - w - 8);
+        const top = clamp(drag.startTop + dy, 8, window.innerHeight - h - 8);
+
+        drag.el.style.left = `${left}px`;
+        drag.el.style.top = `${top}px`;
+        drag.el.style.transform = 'none';
+    }
+
+    function onUp() {
+        if (!drag) return;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        drag = null;
+    }
+
+    document.addEventListener('mousedown', (e) => {
+        const h2 = e.target && e.target.closest ? e.target.closest('.modal-content h2') : null;
+        if (!h2) return;
+        const content = h2.closest('.modal-content');
+        if (!content) return;
+
+        const rect = content.getBoundingClientRect();
+        drag = {
+            el: content,
+            startX: e.clientX,
+            startY: e.clientY,
+            startLeft: rect.left,
+            startTop: rect.top
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFloatingModals);
+} else {
+    initFloatingModals();
+}
+
 // Función fetch genérica
 async function apiFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token_paciente');

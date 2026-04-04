@@ -3,8 +3,23 @@
 // ============================================================
 const jwt = require('jsonwebtoken');
 
+const DEFAULT_PRIVILEGIOS = [
+  'dashboard',
+  'pacientes',
+  'medicos',
+  'especialidades',
+  'quirofanos',
+  'equipos',
+  'reservas',
+  'emergencias',
+  'reportes',
+  'usuarios',
+  'perfiles',
+  'monitoreo'
+];
+
 function parsePrivilegios(privilegios) {
-  if (!privilegios) return [];
+  if (!privilegios) return DEFAULT_PRIVILEGIOS;
   if (Array.isArray(privilegios)) return privilegios.map(String);
   return String(privilegios)
     .split(',')
@@ -43,7 +58,6 @@ function verificarToken(req, res, next) {
 
 function verificarPerfil(...perfilesPermitidos) {
   return (req, res, next) => {
-    if (req.usuario) return next();
     if (!perfilesPermitidos.includes(req.usuario.perfil)) {
       return res.status(403).json({
         error: 'No tienes permisos para esta acción'
@@ -55,7 +69,6 @@ function verificarPerfil(...perfilesPermitidos) {
 
 function verificarPermiso(modulo, accion) {
   return (req, res, next) => {
-    if (req.usuario) return next();
     const perfil = String(req.usuario?.perfil || '');
     if (perfil.toUpperCase() === 'ADMINISTRADOR') return next();
 

@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { getConnection } = require('../config/db');
-const { verificarToken, verificarPerfil } = require('../middleware/auth');
+const { verificarToken, verificarPermiso } = require('../middleware/auth');
+
+const DEFAULT_PRIVILEGIOS = 'dashboard,pacientes,medicos,especialidades,quirofanos,equipos,reservas,emergencias,reportes,usuarios,perfiles,monitoreo';
 
 // Obtener todos los perfiles
-router.get('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+router.get('/', verificarToken, verificarPermiso('perfiles', 'read'), async (req, res) => {
   let conn;
   try {
     conn = await getConnection();
@@ -18,7 +20,7 @@ router.get('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, re
 });
 
 // Crear perfil
-router.post('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+router.post('/', verificarToken, verificarPermiso('perfiles', 'write'), async (req, res) => {
   const { nombre, descripcion, privilegios } = req.body;
   let conn;
   try {
@@ -26,7 +28,7 @@ router.post('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, r
     await conn.execute(
       `INSERT INTO PERFILES_SISTEMA (id_perfil, nombre, descripcion, privilegios, activo)
        VALUES (SEQ_PERFILES.NEXTVAL, :nombre, :descripcion, :privilegios, 1)`,
-      { nombre, descripcion, privilegios }
+      { nombre, descripcion, privilegios: privilegios || DEFAULT_PRIVILEGIOS }
     );
     await conn.commit();
     res.json({ mensaje: 'Perfil creado exitosamente' });
@@ -38,7 +40,7 @@ router.post('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, r
 });
 
 // Actualizar privilegios
-router.put('/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+router.put('/:id', verificarToken, verificarPermiso('perfiles', 'write'), async (req, res) => {
   const { nombre, descripcion, privilegios } = req.body;
   let conn;
   try {

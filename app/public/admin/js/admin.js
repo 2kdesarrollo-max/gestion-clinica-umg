@@ -80,9 +80,24 @@ function isSuperAdminUser(user) {
     return perfil === 'ADMINISTRADOR' || perfil === 'SUPERADMIN' || perfil === 'SUPER_ADMIN';
 }
 
+const DEFAULT_PRIVILEGIOS = [
+    'dashboard',
+    'pacientes',
+    'medicos',
+    'especialidades',
+    'quirofanos',
+    'equipos',
+    'reservas',
+    'emergencias',
+    'reportes',
+    'usuarios',
+    'perfiles',
+    'monitoreo'
+];
+
 function getPrivilegeTokens(user) {
     const privs = user?.privilegios;
-    if (!privs) return [];
+    if (!privs) return DEFAULT_PRIVILEGIOS.slice();
     if (Array.isArray(privs)) return privs.map(String);
     return String(privs).split(',').map(s => s.trim()).filter(Boolean);
 }
@@ -90,7 +105,6 @@ function getPrivilegeTokens(user) {
 function canReadModule(user, moduleId) {
     const m = String(moduleId || '').trim();
     if (!m) return false;
-    if (user) return true;
     if (isSuperAdminUser(user)) return true;
     const tokens = getPrivilegeTokens(user);
     return tokens.includes(m) || tokens.includes(`${m}:r`) || tokens.includes(`${m}:w`);
@@ -99,7 +113,6 @@ function canReadModule(user, moduleId) {
 function canWriteModule(user, moduleId) {
     const m = String(moduleId || '').trim();
     if (!m) return false;
-    if (user) return true;
     if (isSuperAdminUser(user)) return true;
     const tokens = getPrivilegeTokens(user);
     return tokens.includes(m) || tokens.includes(`${m}:w`);
@@ -1488,7 +1501,7 @@ function abrirModalPerfil() {
     document.getElementById('id_perfil').value = '';
     document.getElementById('nombre').value = '';
     document.getElementById('descripcion').value = '';
-    document.querySelectorAll('input[name="privilegios"]').forEach(cb => { cb.checked = false; });
+    document.querySelectorAll('input[name="privilegios"]').forEach(cb => { cb.checked = true; });
     modal.style.display = 'block';
 
     bindOnce('perfil-form', () => {

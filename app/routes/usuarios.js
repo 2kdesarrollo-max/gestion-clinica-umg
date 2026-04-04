@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { getConnection } = require('../config/db');
-const { verificarToken, verificarPerfil } = require('../middleware/auth');
+const { verificarToken, verificarPerfil, verificarPermiso } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 
 // Obtener todos los usuarios
-router.get('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+router.get('/', verificarToken, verificarPermiso('usuarios', 'read'), async (req, res) => {
   let conn;
   try {
     conn = await getConnection();
@@ -24,7 +24,7 @@ router.get('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, re
 });
 
 // Crear usuario
-router.post('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+router.post('/', verificarToken, verificarPermiso('usuarios', 'write'), async (req, res) => {
   const { nombre, apellido, username, email, password, id_perfil } = req.body;
   let conn;
   try {
@@ -46,7 +46,7 @@ router.post('/', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, r
 });
 
 // Actualizar usuario
-router.put('/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+router.put('/:id', verificarToken, verificarPermiso('usuarios', 'write'), async (req, res) => {
   const { nombre, apellido, email, id_perfil } = req.body;
   let conn;
   try {
@@ -67,7 +67,7 @@ router.put('/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req,
 });
 
 // Activar/Desactivar usuario
-router.put('/estado/:id', verificarToken, verificarPerfil('ADMINISTRADOR'), async (req, res) => {
+router.put('/estado/:id', verificarToken, verificarPermiso('usuarios', 'write'), async (req, res) => {
   const { activo } = req.body;
   let conn;
   try {
