@@ -98,12 +98,19 @@ const DEFAULT_PRIVILEGIOS = [
 function getPrivilegeTokens(user) {
     const privs = user?.privilegios;
     if (!privs) return DEFAULT_PRIVILEGIOS.slice();
-    if (Array.isArray(privs)) return privs.map(String);
-    return String(privs).split(',').map(s => s.trim()).filter(Boolean);
+    if (Array.isArray(privs)) {
+        return privs
+            .map(v => String(v).trim().toLowerCase())
+            .filter(Boolean);
+    }
+    return String(privs)
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
 }
 
 function canReadModule(user, moduleId) {
-    const m = String(moduleId || '').trim();
+    const m = String(moduleId || '').trim().toLowerCase();
     if (!m) return false;
     if (isSuperAdminUser(user)) return true;
     const tokens = getPrivilegeTokens(user);
@@ -111,7 +118,7 @@ function canReadModule(user, moduleId) {
 }
 
 function canWriteModule(user, moduleId) {
-    const m = String(moduleId || '').trim();
+    const m = String(moduleId || '').trim().toLowerCase();
     if (!m) return false;
     if (isSuperAdminUser(user)) return true;
     const tokens = getPrivilegeTokens(user);

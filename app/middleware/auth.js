@@ -20,22 +20,26 @@ const DEFAULT_PRIVILEGIOS = [
 
 function parsePrivilegios(privilegios) {
   if (!privilegios) return DEFAULT_PRIVILEGIOS;
-  if (Array.isArray(privilegios)) return privilegios.map(String);
+  if (Array.isArray(privilegios)) {
+    return privilegios
+      .map(v => String(v).trim().toLowerCase())
+      .filter(Boolean);
+  }
   return String(privilegios)
     .split(',')
-    .map(s => s.trim())
+    .map(s => s.trim().toLowerCase())
     .filter(Boolean);
 }
 
 function hasModuleRead(privs, modulo) {
-  const m = String(modulo || '').trim();
+  const m = String(modulo || '').trim().toLowerCase();
   if (!m) return false;
   const tokens = parsePrivilegios(privs);
   return tokens.includes(m) || tokens.includes(`${m}:r`) || tokens.includes(`${m}:w`);
 }
 
 function hasModuleWrite(privs, modulo) {
-  const m = String(modulo || '').trim();
+  const m = String(modulo || '').trim().toLowerCase();
   if (!m) return false;
   const tokens = parsePrivilegios(privs);
   return tokens.includes(m) || tokens.includes(`${m}:w`);
