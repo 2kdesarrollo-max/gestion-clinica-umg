@@ -19,14 +19,16 @@ router.get('/', verificarToken, async (req, res) => {
   try {
     conn = await getConnection();
     let sql = `
-      SELECT r.*, p.nombre || ' ' || p.apellido paciente,
-             m.nombre || ' ' || m.apellido medico,
-             q.nombre quirofano, e.nombre especialidad
+      SELECT r.*,
+             NVL(p.nombre || ' ' || p.apellido, '--') paciente,
+             NVL(m.nombre || ' ' || m.apellido, '--') medico,
+             NVL(q.nombre, '--') quirofano,
+             NVL(e.nombre, '--') especialidad
       FROM RESERVAS r
-      JOIN PACIENTES p ON r.id_paciente = p.id_paciente
-      JOIN MEDICOS m ON r.id_medico = m.id_medico
-      JOIN QUIROFANOS q ON r.id_quirofano = q.id_quirofano
-      JOIN ESPECIALIDADES e ON r.id_especialidad = e.id_especialidad
+      LEFT JOIN PACIENTES p ON r.id_paciente = p.id_paciente
+      LEFT JOIN MEDICOS m ON r.id_medico = m.id_medico
+      LEFT JOIN QUIROFANOS q ON r.id_quirofano = q.id_quirofano
+      LEFT JOIN ESPECIALIDADES e ON r.id_especialidad = e.id_especialidad
       WHERE 1=1
     `;
     const params = {};
