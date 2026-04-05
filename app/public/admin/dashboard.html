@@ -7,22 +7,7 @@
     <link rel="stylesheet" href="css/admin.css">
 </head>
 <body class="admin-body">
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <img src="/imagenes/emojihospital.png" alt="Logo" style="height: 60px;">
-            <h2>Admin GCI-UMG</h2>
-        </div>
-        <nav id="sidebar-nav">
-            <!-- Sidebar se cargará dinámicamente -->
-        </nav>
-        <div class="sidebar-footer">
-            <div id="user-info">
-                <p id="user-name">Usuario Admin</p>
-                <p id="user-role">Administrador</p>
-            </div>
-            <button onclick="logoutAdmin()" class="btn-logout">Cerrar Sesión</button>
-        </div>
-    </aside>
+    <aside class="sidebar" id="sidebar-container"></aside>
 
     <main class="admin-main">
         <header class="main-header">
@@ -190,8 +175,6 @@
                 return;
             }
             initSidebar(user.privilegios);
-            document.getElementById('user-name').innerText = user.nombre;
-            document.getElementById('user-role').innerText = user.perfil;
             initDashboardPage();
         });
     </script>
