@@ -820,8 +820,11 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
     const colsFinal = colsActive.concat(missing);
 
     const colCount = colsFinal.length || 1;
-    const gridCols = `80px repeat(${colCount}, minmax(220px, 1fr))`;
-    const minWidthPx = 80 + (colCount * 240);
+    const isSmall = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+    const timeColW = isSmall ? 64 : 80;
+    const minColW = isSmall ? 160 : 220;
+    const gridCols = `${timeColW}px repeat(${colCount}, minmax(${minColW}px, 1fr))`;
+    const minWidthPx = timeColW + (colCount * (minColW + 20));
 
     const reservasById = new Map();
     reservasRaw.forEach(r => reservasById.set(Number(r.ID_RESERVA), r));

@@ -55,6 +55,43 @@ body {
     }
 }
 
+@media (max-width: 600px) {
+    .main-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .header-actions {
+        width: 100%;
+    }
+
+    .header-actions .btn-primary,
+    .header-actions .btn-refresh,
+    .header-actions .input-date {
+        width: 100%;
+    }
+
+    #last-refresh {
+        display: none;
+    }
+
+    .scheduler-root {
+        max-height: calc(100vh - 210px);
+    }
+
+    .scheduler-head-cell {
+        padding: 10px 8px;
+        font-size: 0.85rem;
+    }
+
+    .scheduler-time {
+        height: 52px;
+        padding: 8px 8px;
+        font-size: 0.8rem;
+    }
+}
+
 /* Sidebar */
 .sidebar {
     width: var(--sidebar-width);
@@ -310,6 +347,7 @@ body {
     border-radius: 14px;
     backdrop-filter: blur(12px);
     overflow: auto;
+    -webkit-overflow-scrolling: touch;
     box-shadow: 0 10px 30px rgba(16,24,40,0.08);
     max-height: calc(100vh - 260px);
 }
