@@ -14,7 +14,7 @@ router.post('/login', async (req, res) => {
     conn = await getConnection();
     const result = await conn.execute(
       `SELECT u.id_usuario, u.nombre, u.apellido, u.username,
-              u.password_hash, u.activo, u.id_perfil,
+              u.password_hash, u.activo, u.id_perfil, u.id_medico,
               p.nombre perfil, p.privilegios
        FROM USUARIOS_SISTEMA u
        JOIN PERFILES_SISTEMA p ON u.id_perfil = p.id_perfil
@@ -41,7 +41,8 @@ router.post('/login', async (req, res) => {
         username: usuario.USERNAME,
         nombre: usuario.NOMBRE + ' ' + usuario.APELLIDO,
         perfil: usuario.PERFIL,
-        privilegios
+        privilegios,
+        id_medico: usuario.ID_MEDICO || null
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES }
@@ -53,6 +54,7 @@ router.post('/login', async (req, res) => {
         nombre: usuario.NOMBRE + ' ' + usuario.APELLIDO,
         username: usuario.USERNAME,
         perfil: usuario.PERFIL,
+        id_medico: usuario.ID_MEDICO || null,
         privilegios: privilegios ? String(privilegios).split(',').map(s => s.trim()).filter(Boolean) : []
       }
     });

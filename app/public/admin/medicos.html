@@ -46,6 +46,7 @@
             <h2 id="modal-titulo">Nuevo Médico</h2>
             <form id="medico-form">
                 <input type="hidden" id="id_medico" name="id_medico">
+                <input type="hidden" id="id_usuario_sistema" name="id_usuario_sistema">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="nombre">Nombre</label>
@@ -71,6 +72,22 @@
                 <div class="form-group">
                     <label for="telefono">Teléfono</label>
                     <input type="text" id="telefono" name="telefono">
+                </div>
+                <h3>Acceso al sistema (opcional)</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="username_sistema">Usuario</label>
+                        <input type="text" id="username_sistema" name="username_sistema" placeholder="Ej: dr.coy">
+                    </div>
+                    <div class="form-group password-wrap">
+                        <label for="password_sistema">Contraseña</label>
+                        <input type="password" id="password_sistema" name="password_sistema" placeholder="••••••••">
+                        <button type="button" class="password-toggle" data-target="password_sistema">Ver</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="id_perfil_sistema">Perfil (rol)</label>
+                    <select id="id_perfil_sistema" name="id_perfil_sistema"></select>
                 </div>
                 <button type="submit" class="btn-primary btn-block">Guardar</button>
             </form>

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const oracledb = require('oracledb');
 const { getConnection } = require('../config/db');
 const { verificarToken } = require('../middleware/auth');
 
@@ -81,13 +82,23 @@ router.post('/', verificarToken, async (req, res) => {
   let conn;
   try {
     conn = await getConnection();
-    await conn.execute(
+    const result = await conn.execute(
       `INSERT INTO MEDICOS (id_medico, nombre, apellido, id_especialidad, licencia, telefono, email, activo)
-       VALUES (SEQ_MEDICOS.NEXTVAL, :nombre, :apellido, :id_especialidad, :licencia, :telefono, :email, 1)`,
-      { nombre, apellido, id_especialidad, licencia, telefono, email }
+       VALUES (SEQ_MEDICOS.NEXTVAL, :nombre, :apellido, :id_especialidad, :licencia, :telefono, :email, 1)
+       RETURNING id_medico INTO :id_out`,
+      {
+        nombre,
+        apellido,
+        id_especialidad,
+        licencia,
+        telefono,
+        email,
+        id_out: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+      }
     );
     await conn.commit();
-    res.json({ mensaje: 'Médico creado exitosamente' });
+    const id_medico = result?.outBinds?.id_out ? Number(result.outBinds.id_out[0]) : null;
+    res.json({ mensaje: 'Médico creado exitosamente', id_medico });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {

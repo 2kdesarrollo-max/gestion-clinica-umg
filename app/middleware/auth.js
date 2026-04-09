@@ -70,7 +70,7 @@ async function verificarToken(req, res, next) {
     if (decoded && !decoded.tipo && decoded.id) {
       conn = await getConnection();
       const result = await conn.execute(
-        `SELECT u.id_usuario, u.activo, p.nombre perfil, p.privilegios
+        `SELECT u.id_usuario, u.id_medico, u.activo, p.nombre perfil, p.privilegios
          FROM USUARIOS_SISTEMA u
          JOIN PERFILES_SISTEMA p ON u.id_perfil = p.id_perfil
          WHERE u.id_usuario = :id AND u.activo = 1`,
@@ -82,6 +82,7 @@ async function verificarToken(req, res, next) {
       const row = result.rows[0];
       req.usuario.perfil = row.PERFIL;
       req.usuario.privilegios = row.PRIVILEGIOS;
+      req.usuario.id_medico = row.ID_MEDICO || null;
     }
     next();
   } catch (err) {

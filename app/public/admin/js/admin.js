@@ -1201,6 +1201,43 @@ async function cargarMedicos() {
     } catch (err) { alert(err.message); }
 }
 
+async function ensurePerfilesSistemaSelect() {
+    const sel = document.getElementById('id_perfil_sistema');
+    if (!sel) return;
+    try {
+        if (!Array.isArray(perfilesCache) || perfilesCache.length === 0) {
+            const perfiles = await client.get('/perfiles');
+            perfilesCache = Array.isArray(perfiles) ? perfiles : [];
+        }
+        sel.innerHTML = perfilesCache.map(p => `<option value="${p.ID_PERFIL}">${p.NOMBRE}</option>`).join('');
+        const def = perfilesCache.find(p => String(p.NOMBRE || '').toUpperCase() === 'MEDICO') || perfilesCache[0];
+        if (def) sel.value = String(def.ID_PERFIL);
+    } catch {
+        sel.innerHTML = '';
+    }
+}
+
+async function cargarAccesoSistemaMedico(idMedico) {
+    const idEl = document.getElementById('id_usuario_sistema');
+    const userEl = document.getElementById('username_sistema');
+    const passEl = document.getElementById('password_sistema');
+    const perfilEl = document.getElementById('id_perfil_sistema');
+    if (!idEl || !userEl || !passEl || !perfilEl) return;
+
+    idEl.value = '';
+    userEl.value = '';
+    passEl.value = '';
+    await ensurePerfilesSistemaSelect();
+
+    try {
+        const u = await client.get(`/usuarios/por-medico/${idMedico}`);
+        if (!u) return;
+        idEl.value = String(u.ID_USUARIO || '');
+        userEl.value = String(u.USERNAME || '');
+        if (u.ID_PERFIL) perfilEl.value = String(u.ID_PERFIL);
+    } catch {}
+}
+
 function filtrarMedicos() {
     const body = document.getElementById('medicos-body');
     if (!body) return;
@@ -1235,11 +1272,18 @@ function abrirModalMedico() {
 
     document.getElementById('modal-titulo').textContent = 'Nuevo Médico';
     document.getElementById('id_medico').value = '';
+    const idUsuarioSistema = document.getElementById('id_usuario_sistema');
+    if (idUsuarioSistema) idUsuarioSistema.value = '';
     document.getElementById('nombre').value = '';
     document.getElementById('apellido').value = '';
     document.getElementById('licencia').value = '';
     document.getElementById('email').value = '';
     document.getElementById('telefono').value = '';
+    const usernameSistema = document.getElementById('username_sistema');
+    const passwordSistema = document.getElementById('password_sistema');
+    if (usernameSistema) usernameSistema.value = '';
+    if (passwordSistema) passwordSistema.value = '';
+    ensurePerfilesSistemaSelect();
     modal.style.display = 'block';
 
     bindOnce('medico-form', () => {
@@ -1254,12 +1298,49 @@ function abrirModalMedico() {
             const licencia = document.getElementById('licencia').value;
             const email = document.getElementById('email').value;
             const telefono = document.getElementById('telefono').value;
+            const idUsuarioSistemaVal = document.getElementById('id_usuario_sistema')?.value || '';
+            const usernameSistemaVal = (document.getElementById('username_sistema')?.value || '').trim();
+            const passwordSistemaVal = document.getElementById('password_sistema')?.value || '';
+            const idPerfilSistemaVal = Number(document.getElementById('id_perfil_sistema')?.value || 0) || null;
 
             try {
+                let medicoId = id ? Number(id) : null;
                 if (id) {
                     await client.put(`/medicos/${id}`, { nombre, apellido, id_especialidad, licencia, telefono, email });
                 } else {
-                    await client.post('/medicos', { nombre, apellido, id_especialidad, licencia, telefono, email });
+                    const r = await client.post('/medicos', { nombre, apellido, id_especialidad, licencia, telefono, email });
+                    medicoId = r?.id_medico ? Number(r.id_medico) : null;
+                }
+
+                if (!medicoId) medicoId = id ? Number(id) : null;
+                if (medicoId && (usernameSistemaVal || passwordSistemaVal || idUsuarioSistemaVal)) {
+                    if (idUsuarioSistemaVal) {
+                        await client.put(`/usuarios/${idUsuarioSistemaVal}`, {
+                            nombre,
+                            apellido,
+                            username: usernameSistemaVal || null,
+                            email,
+                            id_perfil: idPerfilSistemaVal,
+                            id_medico: medicoId
+                        });
+                        if (passwordSistemaVal) {
+                            await client.put(`/usuarios/${idUsuarioSistemaVal}/password`, { password: passwordSistemaVal });
+                        }
+                    } else {
+                        if (!usernameSistemaVal || !passwordSistemaVal) {
+                            showToast('Para crear acceso, usuario y contraseña son requeridos', 'error');
+                            return;
+                        }
+                        await client.post('/usuarios', {
+                            nombre,
+                            apellido,
+                            username: usernameSistemaVal,
+                            email,
+                            password: passwordSistemaVal,
+                            id_perfil: idPerfilSistemaVal,
+                            id_medico: medicoId
+                        });
+                    }
                 }
                 cerrarModalMedico();
                 await cargarMedicos();
@@ -1293,6 +1374,7 @@ async function editarMedico(idMedico) {
     document.getElementById('licencia').value = medico.LICENCIA || '';
     document.getElementById('email').value = medico.EMAIL || '';
     document.getElementById('telefono').value = medico.TELEFONO || '';
+    await cargarAccesoSistemaMedico(medico.ID_MEDICO);
 }
 
 async function cargarReservas() {
