@@ -13,6 +13,24 @@ function obtenerActor(usuario) {
   return 'sistema';
 }
 
+async function replaceReservaEquipos(conn, idReserva, equipos) {
+  const id = Number(idReserva);
+  if (!Number.isFinite(id)) throw new Error('id_reserva inválido');
+  const list = Array.isArray(equipos) ? equipos : [];
+  await conn.execute(`DELETE FROM RESERVA_EQUIPOS WHERE id_reserva = :id`, { id });
+  for (const item of list) {
+    const id_equipo = Number(item?.id_equipo);
+    const cantidad = Number(item?.cantidad || 1);
+    if (!Number.isFinite(id_equipo) || id_equipo <= 0) continue;
+    if (!Number.isFinite(cantidad) || cantidad <= 0) continue;
+    await conn.execute(
+      `INSERT INTO RESERVA_EQUIPOS (id_reserva_equipo, id_reserva, id_equipo, cantidad)
+       VALUES (SEQ_RESERVA_EQUIPOS.NEXTVAL, :id_reserva, :id_equipo, :cantidad)`,
+      { id_reserva: id, id_equipo, cantidad }
+    );
+  }
+}
+
 // Obtener todas las reservas con filtros
 router.get('/', verificarToken, async (req, res) => {
   let conn;
@@ -208,9 +226,62 @@ router.get('/:id/tracker', verificarToken, async (req, res) => {
   }
 });
 
+// Equipos asignados a una reserva
+router.get('/:id/equipos', verificarToken, async (req, res) => {
+  const idReserva = req.params.id;
+  let conn;
+  try {
+    conn = await getConnection();
+    const base = await conn.execute(
+      `SELECT id_reserva, id_paciente FROM RESERVAS WHERE id_reserva = :id`,
+      { id: idReserva }
+    );
+    if (!base.rows || base.rows.length === 0) return res.status(404).json({ error: 'Reserva no encontrada' });
+    const row = base.rows[0];
+    if (req.usuario?.tipo === 'PACIENTE' && String(row.ID_PACIENTE) !== String(req.usuario.id)) {
+      return res.status(403).json({ error: 'No tienes permisos para ver esta reserva' });
+    }
+    const result = await conn.execute(
+      `SELECT re.id_equipo, re.cantidad, e.nombre, e.cantidad_disponible
+       FROM RESERVA_EQUIPOS re
+       JOIN EQUIPOS e ON re.id_equipo = e.id_equipo
+       WHERE re.id_reserva = :id
+       ORDER BY e.nombre ASC`,
+      { id: idReserva }
+    );
+    res.json(result.rows || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (conn) await conn.close();
+  }
+});
+
+// Reemplazar equipos de una reserva (admin/operación)
+router.put('/:id/equipos', verificarToken, async (req, res) => {
+  if (req.usuario?.tipo === 'PACIENTE') return res.status(403).json({ error: 'No tienes permisos para esta acción' });
+  const idReserva = req.params.id;
+  const { equipos } = req.body || {};
+  let conn;
+  try {
+    conn = await getConnection();
+    await replaceReservaEquipos(conn, idReserva, equipos);
+    await conn.commit();
+    res.json({ mensaje: 'Equipos actualizados' });
+  } catch (err) {
+    const msg = String(err.message || '');
+    if (msg.includes('ORA-20004')) {
+      return res.status(409).json({ error: 'No hay suficiente cantidad disponible de uno o más equipos' });
+    }
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (conn) await conn.close();
+  }
+});
+
 // Crear reserva (llama SP_RESERVAR_QUIROFANO)
 router.post('/', verificarToken, async (req, res) => {
-  const { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, fecha, hora_inicio, hora_fin, prioridad } = req.body;
+  const { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, fecha, hora_inicio, hora_fin, prioridad, equipos } = req.body;
   let conn;
   try {
     conn = await getConnection();
@@ -231,7 +302,12 @@ router.post('/', verificarToken, async (req, res) => {
         id_reserva: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
       }
     );
-    res.json({ mensaje: 'Reserva creada exitosamente', id: result.outBinds.id_reserva });
+    const idReserva = result.outBinds.id_reserva;
+    if (req.usuario?.tipo !== 'PACIENTE' && Array.isArray(equipos) && equipos.length > 0) {
+      await replaceReservaEquipos(conn, idReserva, equipos);
+      await conn.commit();
+    }
+    res.json({ mensaje: 'Reserva creada exitosamente', id: idReserva });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {
@@ -294,7 +370,8 @@ router.put('/reprogramar/:id', verificarToken, async (req, res) => {
 
 // Asignar/Programar reserva (cambia médico/quirofano/horario)
 router.put('/asignar/:id', verificarToken, async (req, res) => {
-  const { id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, fecha, hora_inicio, hora_fin, prioridad } = req.body;
+  if (req.usuario?.tipo === 'PACIENTE') return res.status(403).json({ error: 'No tienes permisos para esta acción' });
+  const { id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, fecha, hora_inicio, hora_fin, prioridad, equipos } = req.body;
   let conn;
   try {
     conn = await getConnection();
@@ -324,13 +401,18 @@ router.put('/asignar/:id', verificarToken, async (req, res) => {
         id: req.params.id
       }
     );
+    if (Array.isArray(equipos)) {
+      await replaceReservaEquipos(conn, req.params.id, equipos);
+    }
     await conn.commit();
     res.json({ mensaje: 'Reserva programada' });
   } catch (err) {
     const msg = String(err.message || '');
     if (msg.includes('ORA-20001') || msg.includes('ORA-20003') || msg.includes('ORA-20004')) {
       return res.status(409).json({
-        error: 'Conflicto: el quirófano o el médico no están disponibles en ese horario. Ajusta horario o asigna otro.'
+        error: msg.includes('ORA-20004')
+          ? 'No hay suficiente cantidad disponible de uno o más equipos'
+          : 'Conflicto: el quirófano o el médico no están disponibles en ese horario. Ajusta horario o asigna otro.'
       });
     }
     res.status(500).json({ error: err.message });
@@ -368,6 +450,10 @@ router.delete('/:id', verificarToken, async (req, res) => {
       `BEGIN SP_CANCELAR_RESERVA(:id, :motivo, :cancelado_por); END;`,
       { id: req.params.id, motivo: motivo || 'Cancelado por usuario', cancelado_por: obtenerActor(req.usuario) }
     );
+    try {
+      await replaceReservaEquipos(conn, req.params.id, []);
+      await conn.commit();
+    } catch {}
     res.json({ mensaje: 'Reserva cancelada' });
   } catch (err) {
     res.status(500).json({ error: err.message });

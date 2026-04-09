@@ -66,6 +66,7 @@ class APIClient {
 const client = new APIClient();
 let pacientesCache = [];
 let medicosCache = [];
+let quirofanosCache = [];
 let especialidadesCache = [];
 let equiposCache = [];
 let perfilesCache = [];
@@ -1481,6 +1482,84 @@ function verDisponibilidadReserva(idReserva) {
     abrirModalReserva();
 }
 
+function renderEquiposReserva(selected) {
+    const body = document.getElementById('equipos-body');
+    if (!body) return;
+    const map = selected && typeof selected === 'object' ? selected : {};
+    const list = (Array.isArray(equiposCache) ? equiposCache : []).filter(e => Number(e.ACTIVO ?? 1) === 1);
+    body.innerHTML = list.map(e => {
+        const id = Number(e.ID_EQUIPO);
+        const checked = Boolean(map[id]);
+        const qty = checked ? Number(map[id]) : 1;
+        const max = Number(e.CANTIDAD_DISPONIBLE ?? e.CANTIDAD_TOTAL ?? 0) || 0;
+        const disTxt = Number.isFinite(max) ? String(max) : '0';
+        return `
+            <tr>
+                <td>${e.NOMBRE}</td>
+                <td class="center"><input type="checkbox" class="eq-check" data-id="${id}" ${checked ? 'checked' : ''}></td>
+                <td class="center"><input type="number" class="eq-qty" data-id="${id}" min="1" max="${max}" value="${qty}" ${checked ? '' : 'disabled'}></td>
+                <td class="center">${disTxt}</td>
+            </tr>
+        `;
+    }).join('');
+    body.querySelectorAll('.eq-check').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const id = cb.getAttribute('data-id');
+            const qty = body.querySelector(`.eq-qty[data-id="${id}"]`);
+            if (qty instanceof HTMLInputElement) {
+                qty.disabled = !cb.checked;
+                if (cb.checked && (!qty.value || Number(qty.value) < 1)) qty.value = '1';
+            }
+        });
+    });
+}
+
+function collectEquiposReserva() {
+    const body = document.getElementById('equipos-body');
+    if (!body) return [];
+    const out = [];
+    body.querySelectorAll('.eq-check').forEach(cb => {
+        if (!(cb instanceof HTMLInputElement)) return;
+        if (!cb.checked) return;
+        const id = Number(cb.getAttribute('data-id'));
+        const qtyEl = body.querySelector(`.eq-qty[data-id="${id}"]`);
+        const cantidad = qtyEl instanceof HTMLInputElement ? Number(qtyEl.value || 1) : 1;
+        if (!Number.isFinite(id) || id <= 0) return;
+        if (!Number.isFinite(cantidad) || cantidad <= 0) return;
+        out.push({ id_equipo: id, cantidad });
+    });
+    return out;
+}
+
+async function ensureReservaFormSelectsLoaded() {
+    const selPaciente = document.getElementById('id_paciente');
+    const selMedico = document.getElementById('id_medico');
+    const selQuirofano = document.getElementById('id_quirofano');
+    const selEspecialidad = document.getElementById('id_especialidad');
+    const equiposBody = document.getElementById('equipos-body');
+
+    const needsPacientes = selPaciente && selPaciente.options.length === 0;
+    const needsMedicos = selMedico && selMedico.options.length === 0;
+    const needsQuirofanos = selQuirofano && selQuirofano.options.length === 0;
+    const needsEspecialidades = selEspecialidad && selEspecialidad.options.length === 0;
+    const needsEquipos = Boolean(equiposBody) && (!Array.isArray(equiposCache) || equiposCache.length === 0);
+
+    const tasks = [];
+    if (needsPacientes) tasks.push(client.get('/pacientes').then(r => { pacientesCache = Array.isArray(r) ? r : []; }));
+    if (needsMedicos) tasks.push(client.get('/medicos').then(r => { medicosCache = Array.isArray(r) ? r : []; }));
+    if (needsQuirofanos) tasks.push(client.get('/quirofanos').then(r => { quirofanosCache = Array.isArray(r) ? r : []; }));
+    if (needsEspecialidades) tasks.push(client.get('/especialidades').then(r => { especialidadesCache = Array.isArray(r) ? r : []; }));
+    if (needsEquipos) tasks.push(client.get('/equipos').then(r => { equiposCache = Array.isArray(r) ? r : []; }));
+    if (tasks.length) await Promise.all(tasks);
+
+    if (selPaciente && selPaciente.options.length === 0) selPaciente.innerHTML = pacientesCache.map(p => `<option value="${p.ID_PACIENTE}">${p.NOMBRE} ${p.APELLIDO}</option>`).join('');
+    if (selMedico && selMedico.options.length === 0) selMedico.innerHTML = medicosCache.map(m => `<option value="${m.ID_MEDICO}">${m.NOMBRE} ${m.APELLIDO}</option>`).join('');
+    if (selQuirofano && selQuirofano.options.length === 0) selQuirofano.innerHTML = (Array.isArray(quirofanosCache) ? quirofanosCache : []).map(q => `<option value="${q.ID_QUIROFANO}">${q.NOMBRE}</option>`).join('');
+    if (selEspecialidad && selEspecialidad.options.length === 0) selEspecialidad.innerHTML = especialidadesCache.map(e => `<option value="${e.ID_ESPECIALIDAD}">${e.NOMBRE}</option>`).join('');
+
+    if (equiposBody) renderEquiposReserva({});
+}
+
 async function abrirModalReserva() {
     const modal = document.getElementById('modal-reserva');
     if (!modal) return;
@@ -1492,38 +1571,43 @@ async function abrirModalReserva() {
     document.getElementById('tipo_cirugia').value = preset?.tipo_cirugia || '';
     document.getElementById('descripcion').value = preset?.descripcion || '';
     const prioridadEl = document.getElementById('prioridad');
-    if (prioridadEl) prioridadEl.value = 'NORMAL';
+    if (prioridadEl) prioridadEl.value = preset?.prioridad || 'NORMAL';
     document.getElementById('fecha').value = preset?.fecha || '';
     document.getElementById('hora_inicio').value = preset?.hora_inicio || '';
     document.getElementById('hora_fin').value = preset?.hora_fin || '';
     modal.style.display = 'block';
 
-    bindOnce('reserva-form-init', async () => {
-        const [pacientes, medicos, quirofanos, especialidades] = await Promise.all([
-            client.get('/pacientes'),
-            client.get('/medicos'),
-            client.get('/quirofanos'),
-            client.get('/especialidades')
-        ]);
+    await ensureReservaFormSelectsLoaded();
+    const selPaciente = document.getElementById('id_paciente');
+    const selMedico = document.getElementById('id_medico');
+    const selQuirofano = document.getElementById('id_quirofano');
+    const selEspecialidad = document.getElementById('id_especialidad');
 
-        const selPaciente = document.getElementById('id_paciente');
-        const selMedico = document.getElementById('id_medico');
-        const selQuirofano = document.getElementById('id_quirofano');
-        const selEspecialidad = document.getElementById('id_especialidad');
+    if (preset?.id_paciente && selPaciente) selPaciente.value = String(preset.id_paciente);
+    if (preset?.id_medico && selMedico) selMedico.value = String(preset.id_medico);
+    if (preset?.id_quirofano && selQuirofano) selQuirofano.value = String(preset.id_quirofano);
+    if (preset?.id_especialidad && selEspecialidad) selEspecialidad.value = String(preset.id_especialidad);
 
-        if (selPaciente) selPaciente.innerHTML = pacientes.map(p => `<option value="${p.ID_PACIENTE}">${p.NOMBRE} ${p.APELLIDO}</option>`).join('');
-        if (selMedico) selMedico.innerHTML = medicos.map(m => `<option value="${m.ID_MEDICO}">${m.NOMBRE} ${m.APELLIDO}</option>`).join('');
-        if (selQuirofano) selQuirofano.innerHTML = quirofanos.map(q => `<option value="${q.ID_QUIROFANO}">${q.NOMBRE}</option>`).join('');
-        if (selEspecialidad) selEspecialidad.innerHTML = especialidades.map(e => `<option value="${e.ID_ESPECIALIDAD}">${e.NOMBRE}</option>`).join('');
+    const idReserva = preset?.id_reserva ? Number(preset.id_reserva) : null;
+    if (idReserva) {
+        try {
+            const rows = await client.get(`/reservas/${idReserva}/equipos`);
+            const map = {};
+            (Array.isArray(rows) ? rows : []).forEach(r => {
+                const id = Number(r.ID_EQUIPO);
+                const cantidad = Number(r.CANTIDAD || 1);
+                if (Number.isFinite(id) && Number.isFinite(cantidad)) map[id] = cantidad;
+            });
+            renderEquiposReserva(map);
+        } catch {
+            renderEquiposReserva({});
+        }
+    } else {
+        renderEquiposReserva({});
+    }
 
-        if (preset?.id_paciente && selPaciente) selPaciente.value = String(preset.id_paciente);
-        if (preset?.id_medico && selMedico) selMedico.value = String(preset.id_medico);
-        if (preset?.id_quirofano && selQuirofano) selQuirofano.value = String(preset.id_quirofano);
-        if (preset?.id_especialidad && selEspecialidad) selEspecialidad.value = String(preset.id_especialidad);
-        if (preset?.prioridad && prioridadEl) prioridadEl.value = preset.prioridad;
-        reservaPreset = null;
-        await updateReservaDisponibilidad();
-    });
+    reservaPreset = null;
+    await updateReservaDisponibilidad();
 
     bindOnce('reserva-disponibilidad', () => {
         const fields = ['id_medico', 'id_quirofano', 'fecha', 'hora_inicio', 'hora_fin'];
@@ -1551,12 +1635,13 @@ async function abrirModalReserva() {
             const fecha = document.getElementById('fecha').value;
             const hora_inicio = document.getElementById('hora_inicio').value;
             const hora_fin = document.getElementById('hora_fin').value;
+            const equipos = collectEquiposReserva();
 
             try {
                 if (id_reserva) {
-                    await client.put(`/reservas/asignar/${id_reserva}`, { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, prioridad, fecha, hora_inicio, hora_fin });
+                    await client.put(`/reservas/asignar/${id_reserva}`, { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, prioridad, fecha, hora_inicio, hora_fin, equipos });
                 } else {
-                    await client.post('/reservas', { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, prioridad, fecha, hora_inicio, hora_fin });
+                    await client.post('/reservas', { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, prioridad, fecha, hora_inicio, hora_fin, equipos });
                 }
                 cerrarModalReserva();
                 showToast(id_reserva ? 'Reserva programada' : 'Reserva guardada', 'success');

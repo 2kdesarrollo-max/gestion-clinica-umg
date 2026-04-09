@@ -79,7 +79,24 @@
                     <select id="prioridad" name="prioridad" required>
                         <option value="NORMAL">NORMAL</option>
                         <option value="URGENTE">URGENTE</option>
+                        <option value="EMERGENCIA">EMERGENCIA</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>Equipos médicos (opcional)</label>
+                    <div class="equipos-wrap">
+                        <table class="equipos-table">
+                            <thead>
+                                <tr>
+                                    <th>Equipo</th>
+                                    <th class="center">Asignar</th>
+                                    <th class="center">Cantidad</th>
+                                    <th class="center">Disponible</th>
+                                </tr>
+                            </thead>
+                            <tbody id="equipos-body"></tbody>
+                        </table>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="descripcion">Descripción</label>

@@ -192,4 +192,28 @@ END;
 /
 SHOW ERRORS;
 
+CREATE OR REPLACE TRIGGER TRG_RESTAURAR_EQUIPOS_DEL
+BEFORE DELETE ON SUPERADMIN.RESERVA_EQUIPOS
+FOR EACH ROW
+BEGIN
+  UPDATE SUPERADMIN.EQUIPOS
+  SET cantidad_disponible = cantidad_disponible + :OLD.cantidad
+  WHERE id_equipo = :OLD.id_equipo;
+END;
+/
+SHOW ERRORS;
+
+CREATE OR REPLACE TRIGGER TRG_RESTAURAR_EQUIPOS_UPD
+BEFORE UPDATE OF cantidad ON SUPERADMIN.RESERVA_EQUIPOS
+FOR EACH ROW
+BEGIN
+  IF :NEW.cantidad <> :OLD.cantidad THEN
+    UPDATE SUPERADMIN.EQUIPOS
+    SET cantidad_disponible = cantidad_disponible + (:OLD.cantidad - :NEW.cantidad)
+    WHERE id_equipo = :OLD.id_equipo;
+  END IF;
+END;
+/
+SHOW ERRORS;
+
 COMMIT;
