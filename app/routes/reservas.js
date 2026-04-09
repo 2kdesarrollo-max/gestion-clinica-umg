@@ -59,10 +59,12 @@ router.get('/paciente/:id', verificarToken, async (req, res) => {
   try {
     conn = await getConnection();
     const result = await conn.execute(
-      `SELECT r.*, m.nombre || ' ' || m.apellido medico, q.nombre quirofano
+      `SELECT r.*,
+              NVL(m.nombre || ' ' || m.apellido, '--') medico,
+              NVL(q.nombre, '--') quirofano
        FROM RESERVAS r
-       JOIN MEDICOS m ON r.id_medico = m.id_medico
-       JOIN QUIROFANOS q ON r.id_quirofano = q.id_quirofano
+       LEFT JOIN MEDICOS m ON r.id_medico = m.id_medico
+       LEFT JOIN QUIROFANOS q ON r.id_quirofano = q.id_quirofano
        WHERE r.id_paciente = :id ORDER BY r.fecha_reserva DESC`,
       { id: req.params.id }
     );
@@ -147,7 +149,8 @@ router.get('/:id/tracker', verificarToken, async (req, res) => {
     });
 
     try {
-      if (row.ID_MEDICO && row.ID_QUIROFANO) {
+      const estado = String(row.ESTADO || '').toUpperCase();
+      if (estado !== 'SOLICITADA' && row.ID_MEDICO && row.ID_QUIROFANO) {
         const asignacion = await conn.execute(
           `SELECT m.nombre || ' ' || m.apellido medico, q.nombre quirofano
            FROM MEDICOS m, QUIROFANOS q

@@ -234,8 +234,8 @@ if (solicitudForm) {
         const reservaData = Object.fromEntries(formData);
         const paciente = JSON.parse(localStorage.getItem('paciente'));
         reservaData.id_paciente = paciente.id;
-        reservaData.id_medico = 1; // Médico por defecto para solicitudes (asignado luego por admin)
-        reservaData.id_quirofano = 1; // Quirófano por defecto para solicitudes (asignado luego por admin)
+        reservaData.id_medico = null;
+        reservaData.id_quirofano = null;
 
         try {
             await apiFetch('/reservas', {
@@ -263,19 +263,25 @@ async function cargarMisReservas() {
             body.innerHTML = '<tr><td colspan="6">No tienes reservas registradas.</td></tr>';
             return;
         }
-        body.innerHTML = reservas.map(res => `
+        body.innerHTML = reservas.map(res => {
+            const estado = String(res.ESTADO || '').toUpperCase();
+            const showAsignacion = estado !== 'SOLICITADA';
+            const medicoTxt = showAsignacion && res.MEDICO && res.MEDICO !== '--' ? res.MEDICO : 'Pendiente';
+            const quirofanoTxt = showAsignacion && res.QUIROFANO && res.QUIROFANO !== '--' ? res.QUIROFANO : 'Pendiente';
+            return `
             <tr>
                 <td>${new Date(res.FECHA_RESERVA).toLocaleDateString()}</td>
                 <td>${res.TIPO_CIRUGIA}</td>
-                <td>${res.MEDICO || 'Pendiente'}</td>
-                <td>${res.QUIROFANO || 'Pendiente'}</td>
+                <td>${medicoTxt}</td>
+                <td>${quirofanoTxt}</td>
                 <td><span class="badge badge-${res.ESTADO.toLowerCase()}">${res.ESTADO}</span></td>
                 <td>
                     <button class="btn-primary" onclick="verDetalle(${res.ID_RESERVA})">Ver</button>
                     ${(res.ESTADO === 'SOLICITADA' || res.ESTADO === 'APROBADA') ? `<button class="btn-outline" onclick="cancelarReserva(${res.ID_RESERVA})">Cancelar</button>` : ''}
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     } catch (err) {
         body.innerHTML = '<tr><td colspan="6">Error al cargar reservas.</td></tr>';
     }
@@ -294,13 +300,18 @@ function verDetalle(idReserva) {
         return;
     }
 
+    const estado = String(reserva.ESTADO || '').toUpperCase();
+    const showAsignacion = estado !== 'SOLICITADA';
+    const medicoTxt = showAsignacion && reserva.MEDICO && reserva.MEDICO !== '--' ? reserva.MEDICO : 'Pendiente';
+    const quirofanoTxt = showAsignacion && reserva.QUIROFANO && reserva.QUIROFANO !== '--' ? reserva.QUIROFANO : 'Pendiente';
+
     detalle.innerHTML = `
         <p><strong>ID:</strong> ${reserva.ID_RESERVA}</p>
         <p><strong>Fecha:</strong> ${new Date(reserva.FECHA_RESERVA).toLocaleDateString()}</p>
         <p><strong>Cirugía:</strong> ${reserva.TIPO_CIRUGIA}</p>
         <p><strong>Estado:</strong> ${reserva.ESTADO}</p>
-        <p><strong>Médico:</strong> ${reserva.MEDICO || 'Pendiente'}</p>
-        <p><strong>Quirófano:</strong> ${reserva.QUIROFANO || 'Pendiente'}</p>
+        <p><strong>Médico:</strong> ${medicoTxt}</p>
+        <p><strong>Quirófano:</strong> ${quirofanoTxt}</p>
         <p><strong>Descripción:</strong> ${reserva.DESCRIPCION_NECESIDAD || '-'}</p>
     `;
 

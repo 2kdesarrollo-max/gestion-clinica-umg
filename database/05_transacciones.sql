@@ -75,31 +75,45 @@ BEGIN
   );
   SAVEPOINT SP_RESERVA;
 
-  INSERT INTO VALIDACIONES VALUES (
-    SEQ_VALIDACIONES.NEXTVAL, v_id,
-    'QUIROFANO',
-    CASE WHEN v_conf_quirofano = 0 AND v_conf_bloqueo = 0 THEN 'OK' ELSE 'FAIL' END,
-    CASE
-      WHEN v_conf_quirofano > 0 THEN 'Conflicto de quirófano en ese horario'
-      WHEN v_conf_bloqueo > 0 THEN 'Quirófano en mantenimiento/bloqueado en ese horario'
-      ELSE 'Quirófano disponible'
-    END,
-    SYSDATE
-  );
+  IF v_es_paciente = 1 THEN
+    INSERT INTO VALIDACIONES VALUES (
+      SEQ_VALIDACIONES.NEXTVAL, v_id,
+      'ASIGNACION',
+      'PENDIENTE',
+      'Pendiente de asignación de médico y quirófano por recepción.',
+      SYSDATE
+    );
+  ELSE
+    INSERT INTO VALIDACIONES VALUES (
+      SEQ_VALIDACIONES.NEXTVAL, v_id,
+      'QUIROFANO',
+      CASE WHEN v_conf_quirofano = 0 AND v_conf_bloqueo = 0 THEN 'OK' ELSE 'FAIL' END,
+      CASE
+        WHEN v_conf_quirofano > 0 THEN 'Conflicto de quirófano en ese horario'
+        WHEN v_conf_bloqueo > 0 THEN 'Quirófano en mantenimiento/bloqueado en ese horario'
+        ELSE 'Quirófano disponible'
+      END,
+      SYSDATE
+    );
+  END IF;
   SAVEPOINT SP_VALIDACION;
 
-  INSERT INTO VALIDACIONES VALUES (
-    SEQ_VALIDACIONES.NEXTVAL, v_id,
-    'MEDICO',
-    CASE WHEN v_conf_medico = 0 THEN 'OK' ELSE 'FAIL' END,
-    CASE WHEN v_conf_medico = 0 THEN 'Médico disponible' ELSE 'Conflicto de médico en ese horario' END,
-    SYSDATE
-  );
+  IF v_es_paciente = 0 THEN
+    INSERT INTO VALIDACIONES VALUES (
+      SEQ_VALIDACIONES.NEXTVAL, v_id,
+      'MEDICO',
+      CASE WHEN v_conf_medico = 0 THEN 'OK' ELSE 'FAIL' END,
+      CASE WHEN v_conf_medico = 0 THEN 'Médico disponible' ELSE 'Conflicto de médico en ese horario' END,
+      SYSDATE
+    );
+  END IF;
 
-  INSERT INTO VALIDACIONES VALUES (
-    SEQ_VALIDACIONES.NEXTVAL, v_id,
-    'EQUIPOS', 'OK', 'Sin equipos asignados', SYSDATE
-  );
+  IF v_es_paciente = 0 THEN
+    INSERT INTO VALIDACIONES VALUES (
+      SEQ_VALIDACIONES.NEXTVAL, v_id,
+      'EQUIPOS', 'OK', 'Sin equipos asignados', SYSDATE
+    );
+  END IF;
 
   INSERT INTO CONFIRMACIONES VALUES (
     SEQ_CONFIRMACIONES.NEXTVAL, v_id,
