@@ -260,7 +260,7 @@ async function cargarMisReservas() {
         const reservas = await apiFetch(`/reservas/paciente/${paciente.id}`);
         reservasCache = Array.isArray(reservas) ? reservas : [];
         if (reservas.length === 0) {
-            body.innerHTML = '<tr><td colspan="5">No tienes reservas registradas.</td></tr>';
+            body.innerHTML = '<tr><td colspan="6">No tienes reservas registradas.</td></tr>';
             return;
         }
         body.innerHTML = reservas.map(res => `
@@ -268,6 +268,7 @@ async function cargarMisReservas() {
                 <td>${new Date(res.FECHA_RESERVA).toLocaleDateString()}</td>
                 <td>${res.TIPO_CIRUGIA}</td>
                 <td>${res.MEDICO || 'Pendiente'}</td>
+                <td>${res.QUIROFANO || 'Pendiente'}</td>
                 <td><span class="badge badge-${res.ESTADO.toLowerCase()}">${res.ESTADO}</span></td>
                 <td>
                     <button class="btn-primary" onclick="verDetalle(${res.ID_RESERVA})">Ver</button>
@@ -276,7 +277,7 @@ async function cargarMisReservas() {
             </tr>
         `).join('');
     } catch (err) {
-        body.innerHTML = '<tr><td colspan="5">Error al cargar reservas.</td></tr>';
+        body.innerHTML = '<tr><td colspan="6">Error al cargar reservas.</td></tr>';
     }
 }
 

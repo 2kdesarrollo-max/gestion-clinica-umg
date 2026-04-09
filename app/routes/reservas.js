@@ -82,7 +82,7 @@ router.get('/:id/tracker', verificarToken, async (req, res) => {
     conn = await getConnection();
 
     const base = await conn.execute(
-      `SELECT id_reserva, id_paciente, estado, fecha_creacion
+      `SELECT id_reserva, id_paciente, estado, fecha_creacion, id_medico, id_quirofano, hora_inicio, hora_fin
        FROM RESERVAS
        WHERE id_reserva = :id`,
       { id: idReserva }
@@ -145,6 +145,35 @@ router.get('/:id/tracker', verificarToken, async (req, res) => {
         origen: c.CONFIRMADO_POR || 'Sistema'
       });
     });
+
+    try {
+      if (row.ID_MEDICO && row.ID_QUIROFANO) {
+        const asignacion = await conn.execute(
+          `SELECT m.nombre || ' ' || m.apellido medico, q.nombre quirofano
+           FROM MEDICOS m, QUIROFANOS q
+           WHERE m.id_medico = :id_medico
+             AND q.id_quirofano = :id_quirofano`,
+          { id_medico: row.ID_MEDICO, id_quirofano: row.ID_QUIROFANO }
+        );
+        if (asignacion.rows && asignacion.rows.length > 0) {
+          const a = asignacion.rows[0];
+          const lastUpdate = (auditoria.rows || [])
+            .filter(x => String(x.OPERACION || '').toUpperCase() === 'UPDATE')
+            .slice(-1)[0];
+          const hi = row.HORA_INICIO ? new Date(row.HORA_INICIO) : null;
+          const hf = row.HORA_FIN ? new Date(row.HORA_FIN) : null;
+          const horario = (hi && hf)
+            ? `${hi.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })}-${hf.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })}`
+            : '';
+          events.push({
+            tipo: 'ASIGNACION',
+            mensaje: `Asignación confirmada: ${a.MEDICO} · ${a.QUIROFANO}${horario ? ` · ${horario}` : ''}`,
+            fecha_hora: lastUpdate?.FECHA_HORA || row.FECHA_CREACION,
+            origen: 'Hospital'
+          });
+        }
+      }
+    } catch {}
 
     (auditoria.rows || []).forEach(a => {
       if (String(a.OPERACION || '').toUpperCase() !== 'UPDATE') return;
