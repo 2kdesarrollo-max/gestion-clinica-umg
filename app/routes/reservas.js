@@ -74,6 +74,108 @@ router.get('/paciente/:id', verificarToken, async (req, res) => {
   }
 });
 
+// Seguimiento de una reserva (timeline)
+router.get('/:id/tracker', verificarToken, async (req, res) => {
+  const idReserva = req.params.id;
+  let conn;
+  try {
+    conn = await getConnection();
+
+    const base = await conn.execute(
+      `SELECT id_reserva, id_paciente, estado, fecha_creacion
+       FROM RESERVAS
+       WHERE id_reserva = :id`,
+      { id: idReserva }
+    );
+    if (!base.rows || base.rows.length === 0) {
+      return res.status(404).json({ error: 'Reserva no encontrada' });
+    }
+    const row = base.rows[0];
+    if (req.usuario?.tipo === 'PACIENTE' && String(row.ID_PACIENTE) !== String(req.usuario.id)) {
+      return res.status(403).json({ error: 'No tienes permisos para ver esta reserva' });
+    }
+
+    const [validaciones, confirmaciones, auditoria] = await Promise.all([
+      conn.execute(
+        `SELECT tipo_validacion, resultado, mensaje, fecha_hora
+         FROM VALIDACIONES
+         WHERE id_reserva = :id
+         ORDER BY fecha_hora ASC`,
+        { id: idReserva }
+      ),
+      conn.execute(
+        `SELECT confirmado_por, fecha_confirmacion, observaciones
+         FROM CONFIRMACIONES
+         WHERE id_reserva = :id
+         ORDER BY fecha_confirmacion ASC`,
+        { id: idReserva }
+      ),
+      conn.execute(
+        `SELECT operacion, valor_anterior, valor_nuevo, usuario_sistema, fecha_hora
+         FROM AUDITORIA_RESERVAS
+         WHERE tabla_afectada = 'RESERVAS'
+           AND id_registro = :id
+         ORDER BY fecha_hora ASC`,
+        { id: idReserva }
+      )
+    ]);
+
+    const events = [];
+    events.push({
+      tipo: 'CREADA',
+      mensaje: 'Solicitud enviada',
+      fecha_hora: row.FECHA_CREACION,
+      origen: 'Sistema'
+    });
+
+    (validaciones.rows || []).forEach(v => {
+      events.push({
+        tipo: `VALIDACION_${v.TIPO_VALIDACION}`,
+        mensaje: `${v.TIPO_VALIDACION}: ${v.RESULTADO} · ${v.MENSAJE}`,
+        fecha_hora: v.FECHA_HORA,
+        origen: 'Validación'
+      });
+    });
+
+    (confirmaciones.rows || []).forEach(c => {
+      events.push({
+        tipo: 'CONFIRMACION',
+        mensaje: c.OBSERVACIONES,
+        fecha_hora: c.FECHA_CONFIRMACION,
+        origen: c.CONFIRMADO_POR || 'Sistema'
+      });
+    });
+
+    (auditoria.rows || []).forEach(a => {
+      if (String(a.OPERACION || '').toUpperCase() !== 'UPDATE') return;
+      events.push({
+        tipo: 'ACTUALIZACION',
+        mensaje: a.VALOR_NUEVO || 'Actualización',
+        fecha_hora: a.FECHA_HORA,
+        origen: a.USUARIO_SISTEMA || 'Sistema'
+      });
+    });
+
+    const norm = events
+      .filter(e => e && e.fecha_hora)
+      .sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime())
+      .map(e => ({
+        ...e,
+        fecha_hora: new Date(e.fecha_hora).toLocaleString('es-GT')
+      }));
+
+    res.json({
+      id_reserva: row.ID_RESERVA,
+      estado: row.ESTADO,
+      events: norm
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (conn) await conn.close();
+  }
+});
+
 // Crear reserva (llama SP_RESERVAR_QUIROFANO)
 router.post('/', verificarToken, async (req, res) => {
   const { id_paciente, id_medico, id_quirofano, id_especialidad, tipo_cirugia, descripcion, fecha, hora_inicio, hora_fin, prioridad } = req.body;

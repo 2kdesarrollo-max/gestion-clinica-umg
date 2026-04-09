@@ -30,6 +30,46 @@ if (document.readyState === 'loading') {
     initPasswordToggles();
 }
 
+function getPaciente() {
+    try {
+        return JSON.parse(localStorage.getItem('paciente') || 'null');
+    } catch {
+        return null;
+    }
+}
+
+function initPacienteHeader() {
+    const paciente = getPaciente();
+    const navUser = document.getElementById('nav-user');
+    const navReservas = document.getElementById('nav-reservas');
+    const navSolicitud = document.getElementById('nav-solicitud');
+    const navLogin = document.getElementById('nav-login');
+    const navLogout = document.getElementById('nav-logout');
+    if (navUser && navUser.querySelector('.nav-user')) {
+        navUser.querySelector('.nav-user').textContent = paciente?.nombre ? `Hola, ${paciente.nombre}` : '';
+    }
+    if (navUser) navUser.style.display = paciente ? '' : 'none';
+    if (navReservas) navReservas.style.display = paciente ? '' : 'none';
+    if (navSolicitud) navSolicitud.style.display = paciente ? '' : 'none';
+    if (navLogout) navLogout.style.display = paciente ? '' : 'none';
+    if (navLogin) navLogin.style.display = paciente ? 'none' : '';
+
+    const headerNav = document.querySelector('header nav ul');
+    if (headerNav && !document.getElementById('nav-user')) {
+        const li = document.createElement('li');
+        li.id = 'nav-user';
+        li.innerHTML = `<span class="nav-user">${paciente?.nombre ? `Hola, ${paciente.nombre}` : ''}</span>`;
+        const logoutLi = headerNav.querySelector('a[onclick="logout()"]')?.closest('li') || null;
+        if (logoutLi) headerNav.insertBefore(li, logoutLi);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPacienteHeader);
+} else {
+    initPacienteHeader();
+}
+
 function initFloatingModals() {
     let drag = null;
 
@@ -263,6 +303,7 @@ function verDetalle(idReserva) {
         <p><strong>Descripción:</strong> ${reserva.DESCRIPCION_NECESIDAD || '-'}</p>
     `;
 
+    cargarTrackerReserva(reserva.ID_RESERVA);
     modal.style.display = 'block';
 }
 
@@ -292,4 +333,92 @@ function logout() {
     localStorage.removeItem('token_paciente');
     localStorage.removeItem('paciente');
     window.location.href = 'index.html';
+}
+
+async function cargarDisponibilidadSolicitud() {
+    const box = document.getElementById('disponibilidad-box');
+    const grid = document.getElementById('disponibilidad-grid');
+    const fecha = document.getElementById('fecha')?.value;
+    const hora_inicio = document.getElementById('hora_inicio')?.value;
+    const hora_fin = document.getElementById('hora_fin')?.value;
+    if (!box || !grid) return;
+    if (!fecha || !hora_inicio || !hora_fin) {
+        box.style.display = 'none';
+        grid.style.display = 'none';
+        return;
+    }
+    try {
+        const [quirofanos, disp] = await Promise.all([
+            apiFetch('/quirofanos'),
+            apiFetch(`/quirofanos/disponibilidad?fecha=${encodeURIComponent(fecha)}&hora_inicio=${encodeURIComponent(hora_inicio)}&hora_fin=${encodeURIComponent(hora_fin)}`)
+        ]);
+        const ocupados = new Set((disp?.ocupados_por_reserva || []).map(x => Number(x.ID_QUIROFANO)));
+        const bloqueados = new Set((disp?.bloqueados_por_mantenimiento || []).map(x => Number(x.ID_QUIROFANO)));
+        const list = (Array.isArray(quirofanos) ? quirofanos : []).filter(q => Number(q.ACTIVO ?? 1) === 1);
+        const libres = list.filter(q => !ocupados.has(Number(q.ID_QUIROFANO)) && !bloqueados.has(Number(q.ID_QUIROFANO)));
+
+        box.textContent = `Espacios disponibles para ${fecha} ${hora_inicio}-${hora_fin}: ${libres.length} de ${list.length} quirófanos`;
+        box.style.display = 'block';
+        grid.innerHTML = list.map(q => {
+            const id = Number(q.ID_QUIROFANO);
+            const isMaint = bloqueados.has(id);
+            const isBusy = ocupados.has(id);
+            const cls = isMaint ? 'maint' : (isBusy ? 'busy' : 'free');
+            const status = isMaint ? 'MANTENIMIENTO' : (isBusy ? 'OCUPADO' : 'LIBRE');
+            return `
+                <div class="availability-card ${cls}">
+                    <div class="t">${q.NOMBRE}</div>
+                    <div class="s">${status}</div>
+                </div>
+            `;
+        }).join('');
+        grid.style.display = 'grid';
+    } catch (err) {
+        box.textContent = 'No se pudo cargar disponibilidad.';
+        box.style.display = 'block';
+        grid.style.display = 'none';
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        const f = document.getElementById('solicitud-form');
+        if (!f) return;
+        ['fecha', 'hora_inicio', 'hora_fin'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('change', cargarDisponibilidadSolicitud);
+            el.addEventListener('input', cargarDisponibilidadSolicitud);
+        });
+        cargarDisponibilidadSolicitud();
+    });
+}
+
+async function cargarTrackerReserva(idReserva) {
+    const root = document.getElementById('tracker-reserva');
+    if (!root) return;
+    root.innerHTML = '<div class="meta">Cargando seguimiento...</div>';
+    try {
+        const data = await apiFetch(`/reservas/${idReserva}/tracker`);
+        const events = Array.isArray(data?.events) ? data.events : [];
+        if (events.length === 0) {
+            root.innerHTML = '<div class="meta">Sin eventos disponibles.</div>';
+            return;
+        }
+        root.innerHTML = events.map(ev => {
+            const msg = ev.mensaje || ev.tipo || 'Evento';
+            const meta = [ev.fecha_hora, ev.origen].filter(Boolean).join(' · ');
+            return `
+                <div class="tracker-item">
+                    <div class="tracker-dot"></div>
+                    <div>
+                        <div class="msg">${msg}</div>
+                        <div class="meta">${meta}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch {
+        root.innerHTML = '<div class="meta">No se pudo cargar seguimiento.</div>';
+    }
 }
