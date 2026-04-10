@@ -715,7 +715,16 @@ async function refreshDashboard() {
             return dateStrFromValue(e.FECHA_HORA) === fecha;
         });
 
-        if (statQuirofanos) statQuirofanos.textContent = Array.isArray(quirofanosDisponibles) ? quirofanosDisponibles.length : 0;
+        if (statQuirofanos) {
+            const qAll = Array.isArray(quirofanosAll) ? quirofanosAll : [];
+            const active = qAll.filter(q => Number(q.ACTIVO ?? 1) === 1);
+            const rDia = Array.isArray(reservasDia) ? reservasDia : [];
+            const bDia = Array.isArray(bloqueosDia) ? bloqueosDia : [];
+            const qidRes = new Set(rDia.filter(r => dateStrFromValue(r.FECHA_RESERVA) === fecha && ['APROBADA','EN_CURSO','COMPLETADA'].includes(String(r.ESTADO || '').toUpperCase())).map(r => Number(r.ID_QUIROFANO)));
+            const qidBloq = new Set(bDia.map(b => Number(b.ID_QUIROFANO)));
+            const libres = active.filter(q => !qidRes.has(Number(q.ID_QUIROFANO)) && !qidBloq.has(Number(q.ID_QUIROFANO)));
+            statQuirofanos.textContent = String(libres.length);
+        }
         if (statSolicitudes) statSolicitudes.textContent = Array.isArray(reservasSolicitadasAll) ? reservasSolicitadasAll.length : 0;
         if (statEmergencias) statEmergencias.textContent = emergenciasDia.length;
         if (statCompletadas) statCompletadas.textContent = Array.isArray(reservasCompletadas) ? reservasCompletadas.length : 0;
@@ -831,6 +840,14 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
     reservasRaw.forEach(r => reservasById.set(Number(r.ID_RESERVA), r));
     window.__reservasById = reservasById;
 
+    const qidBloq = new Set(bloqueosRaw.map(b => Number(b.ID_QUIROFANO)).filter(n => Number.isFinite(n)));
+    const qidProg = new Set(
+        reservasRaw
+            .filter(r => dateStrFromValue(r.FECHA_RESERVA) === fecha && ['APROBADA','EN_CURSO','COMPLETADA'].includes(String(r.ESTADO || '').toUpperCase()))
+            .map(r => Number(r.ID_QUIROFANO))
+            .filter(n => Number.isFinite(n))
+    );
+
     const head = `
         <div class="scheduler-inner" style="min-width:${minWidthPx}px;">
             <div class="scheduler-header-grid" style="grid-template-columns: ${gridCols};">
@@ -838,7 +855,9 @@ function renderScheduler(root, quirofanos, reservas, emergencias, bloqueos, fech
                 ${colsFinal.map(q => `
                     <div class="scheduler-head-cell">
                         ${q.NOMBRE}
-                        <div style="font-weight: 650; font-size: 0.78rem; color: rgba(31,41,55,0.65); margin-top: 2px;">${q.ESTADO}</div>
+                        <div style="font-weight: 650; font-size: 0.78rem; color: rgba(31,41,55,0.65); margin-top: 2px;">
+                            ${qidBloq.has(Number(q.ID_QUIROFANO)) ? 'MANTENIMIENTO' : (qidProg.has(Number(q.ID_QUIROFANO)) ? 'PROGRAMADO' : 'DISPONIBLE')}
+                        </div>
                     </div>
                 `).join('')}
             </div>
@@ -1552,10 +1571,19 @@ async function ensureReservaFormSelectsLoaded() {
     if (needsEquipos) tasks.push(client.get('/equipos').then(r => { equiposCache = Array.isArray(r) ? r : []; }));
     if (tasks.length) await Promise.all(tasks);
 
-    if (selPaciente && selPaciente.options.length === 0) selPaciente.innerHTML = pacientesCache.map(p => `<option value="${p.ID_PACIENTE}">${p.NOMBRE} ${p.APELLIDO}</option>`).join('');
-    if (selMedico && selMedico.options.length === 0) selMedico.innerHTML = medicosCache.map(m => `<option value="${m.ID_MEDICO}">${m.NOMBRE} ${m.APELLIDO}</option>`).join('');
-    if (selQuirofano && selQuirofano.options.length === 0) selQuirofano.innerHTML = (Array.isArray(quirofanosCache) ? quirofanosCache : []).map(q => `<option value="${q.ID_QUIROFANO}">${q.NOMBRE}</option>`).join('');
-    if (selEspecialidad && selEspecialidad.options.length === 0) selEspecialidad.innerHTML = especialidadesCache.map(e => `<option value="${e.ID_ESPECIALIDAD}">${e.NOMBRE}</option>`).join('');
+    if (selPaciente && selPaciente.options.length === 0) {
+        selPaciente.innerHTML = pacientesCache.map(p => `<option value="${p.ID_PACIENTE}">${p.NOMBRE} ${p.APELLIDO}</option>`).join('');
+    }
+    if (selMedico && selMedico.options.length === 0) {
+        selMedico.innerHTML = `<option value="">Seleccione médico</option>` + medicosCache.map(m => `<option value="${m.ID_MEDICO}">${m.NOMBRE} ${m.APELLIDO}</option>`).join('');
+    }
+    if (selQuirofano && selQuirofano.options.length === 0) {
+        const qs = Array.isArray(quirofanosCache) ? quirofanosCache : [];
+        selQuirofano.innerHTML = `<option value="">Seleccione quirófano</option>` + qs.map(q => `<option value="${q.ID_QUIROFANO}">${q.NOMBRE}</option>`).join('');
+    }
+    if (selEspecialidad && selEspecialidad.options.length === 0) {
+        selEspecialidad.innerHTML = `<option value="">Seleccione especialidad</option>` + especialidadesCache.map(e => `<option value="${e.ID_ESPECIALIDAD}">${e.NOMBRE}</option>`).join('');
+    }
 
     if (equiposBody) renderEquiposReserva({});
 }

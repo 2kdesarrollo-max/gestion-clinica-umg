@@ -193,7 +193,7 @@ CREATE TABLE USUARIOS_SISTEMA (
 CREATE TABLE AUDITORIA_RESERVAS (
   id_auditoria      NUMBER PRIMARY KEY,
   tabla_afectada    VARCHAR2(50),
-  operacion         VARCHAR2(10),
+  operacion         VARCHAR2(20),
   id_registro       NUMBER,
   valor_anterior    VARCHAR2(1000),
   valor_nuevo       VARCHAR2(1000),
