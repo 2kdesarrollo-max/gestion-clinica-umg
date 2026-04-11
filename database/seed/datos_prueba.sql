@@ -169,10 +169,18 @@ INSERT INTO SUPERADMIN.PERFILES_SISTEMA (id_perfil, nombre, descripcion, privile
   'dashboard,reportes,monitoreo',
   1, SYSDATE
 );
+INSERT INTO SUPERADMIN.PERFILES_SISTEMA (id_perfil, nombre, descripcion, privilegios, activo, fecha_creacion) VALUES (
+  SUPERADMIN.SEQ_PERFILES.NEXTVAL,
+  'SUPER_ADMIN',
+  'Acceso total sin restricciones (bypass de permisos)',
+  'dashboard,pacientes,medicos,especialidades,quirofanos,equipos,reservas,emergencias,reportes,usuarios,perfiles,monitoreo',
+  1, SYSDATE
+);
 COMMIT;
 
 -- USUARIOS DEL SISTEMA (15 usuarios)
--- Contraseña: Hospital2026
+-- Contraseña: Hospital2026 (y para ingebdd: inge123)
+INSERT INTO SUPERADMIN.USUARIOS_SISTEMA (id_usuario, nombre, apellido, username, password_hash, email, id_perfil, id_medico, activo, ultimo_acceso, fecha_creacion) VALUES (SUPERADMIN.SEQ_USUARIOS.NEXTVAL,'Inge','BDD','ingebdd','$2b$10$lfabp6iQ2wqmAw9kZYf/f..HIOm/3i7CbQ9FdmeKhhkpbEOg1t9/O','ingebdd@hospital.gt',6,NULL,1,NULL,SYSDATE);
 INSERT INTO SUPERADMIN.USUARIOS_SISTEMA (id_usuario, nombre, apellido, username, password_hash, email, id_perfil, id_medico, activo, ultimo_acceso, fecha_creacion) VALUES (SUPERADMIN.SEQ_USUARIOS.NEXTVAL,'Marvin','Pérez','mperez','$2b$10$ka4JGK3F.VDMALOC3wX75.mdVWpKI9tmIe8LLrOdKg8ul177CXB8G','mperez@hospital.gt',1,NULL,1,NULL,SYSDATE);
 INSERT INTO SUPERADMIN.USUARIOS_SISTEMA (id_usuario, nombre, apellido, username, password_hash, email, id_perfil, id_medico, activo, ultimo_acceso, fecha_creacion) VALUES (SUPERADMIN.SEQ_USUARIOS.NEXTVAL,'Carlo','Sosa','csosa','$2b$10$ka4JGK3F.VDMALOC3wX75.mdVWpKI9tmIe8LLrOdKg8ul177CXB8G','csosa@hospital.gt',1,NULL,1,NULL,SYSDATE);
 INSERT INTO SUPERADMIN.USUARIOS_SISTEMA (id_usuario, nombre, apellido, username, password_hash, email, id_perfil, id_medico, activo, ultimo_acceso, fecha_creacion) VALUES (SUPERADMIN.SEQ_USUARIOS.NEXTVAL,'Karla','Xitumul','kxitumul','$2b$10$ka4JGK3F.VDMALOC3wX75.mdVWpKI9tmIe8LLrOdKg8ul177CXB8G','kxitumul@hospital.gt',1,NULL,1,NULL,SYSDATE);
