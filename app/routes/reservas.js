@@ -450,12 +450,16 @@ router.delete('/:id', verificarToken, async (req, res) => {
       `BEGIN SP_CANCELAR_RESERVA(:id, :motivo, :cancelado_por); END;`,
       { id: req.params.id, motivo: motivo || 'Cancelado por usuario', cancelado_por: obtenerActor(req.usuario) }
     );
-    try {
-      await replaceReservaEquipos(conn, req.params.id, []);
-      await conn.commit();
-    } catch {}
+    await replaceReservaEquipos(conn, req.params.id, []);
+    await conn.commit();
     res.json({ mensaje: 'Reserva cancelada' });
   } catch (err) {
+    try {
+      if (conn) await conn.rollback();
+    } catch {}
+    const msg = String(err.message || '');
+    if (msg.includes('ORA-20010')) return res.status(409).json({ error: 'Reserva no encontrada o no se puede cancelar' });
+    if (msg.includes('ORA-20004')) return res.status(409).json({ error: 'No hay suficiente cantidad disponible del equipo' });
     res.status(500).json({ error: err.message });
   } finally {
     if (conn) await conn.close();

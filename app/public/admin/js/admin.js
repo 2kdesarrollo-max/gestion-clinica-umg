@@ -353,6 +353,18 @@ function drawLineChart(canvasId, seriesA, seriesB, labels) {
     ctx.fillStyle = 'rgba(31,41,55,0.70)';
     const lastLabel = labels && labels.length ? labels[labels.length - 1] : '';
     ctx.fillText(lastLabel, padL, h - 10);
+
+    canvas.__lineSeries = {
+        padL,
+        padR,
+        padT,
+        padB,
+        innerW,
+        innerH,
+        seriesA: Array.isArray(seriesA) ? seriesA : [],
+        seriesB: Array.isArray(seriesB) ? seriesB : [],
+        labels: Array.isArray(labels) ? labels : []
+    };
 }
 
 function drawBarChart(canvasId, items) {
@@ -391,6 +403,25 @@ function drawBarChart(canvasId, items) {
 
     canvas.__barItems = items;
     canvas.__barGeometry = { padL, padT, innerH, barW, barGap };
+}
+
+function showMonTooltip(x, y, title, subtitle) {
+    const tip = document.getElementById('mon-tooltip');
+    if (!tip) return;
+    tip.innerHTML = `<div>${title}</div>${subtitle ? `<div class="sub">${subtitle}</div>` : ''}`;
+    tip.style.display = 'block';
+    const pad = 14;
+    const rect = tip.getBoundingClientRect();
+    const left = Math.min(window.innerWidth - rect.width - pad, x + pad);
+    const top = Math.min(window.innerHeight - rect.height - pad, y + pad);
+    tip.style.left = `${Math.max(pad, left)}px`;
+    tip.style.top = `${Math.max(pad, top)}px`;
+}
+
+function hideMonTooltip() {
+    const tip = document.getElementById('mon-tooltip');
+    if (!tip) return;
+    tip.style.display = 'none';
 }
 
 function setActiveMonTab(tab) {
@@ -451,6 +482,18 @@ function initMonitoreoPage() {
 
     const bar = document.getElementById('chart-waits');
     if (bar) {
+        bar.addEventListener('mousemove', (ev) => {
+            const rect = bar.getBoundingClientRect();
+            const x = (ev.clientX - rect.left) * (bar.width / rect.width);
+            const geom = bar.__barGeometry;
+            const items = bar.__barItems || [];
+            if (!geom || !items.length) return hideMonTooltip();
+            const idx = Math.floor((x - geom.padL) / (geom.barW + geom.barGap));
+            if (idx < 0 || idx >= items.length) return hideMonTooltip();
+            const it = items[idx];
+            showMonTooltip(ev.clientX, ev.clientY, `${it.fullLabel || it.label}: ${it.value}`, 'Sesiones esperando (no Idle)');
+        });
+        bar.addEventListener('mouseleave', hideMonTooltip);
         bar.addEventListener('click', (ev) => {
             const rect = bar.getBoundingClientRect();
             const x = (ev.clientX - rect.left) * (bar.width / rect.width);
@@ -465,6 +508,22 @@ function initMonitoreoPage() {
             setActiveMonTab('sesiones');
             filter?.dispatchEvent(new Event('input'));
         });
+    }
+
+    const line = document.getElementById('chart-sesiones');
+    if (line) {
+        line.addEventListener('mousemove', (ev) => {
+            const rect = line.getBoundingClientRect();
+            const x = (ev.clientX - rect.left) * (line.width / rect.width);
+            const s = line.__lineSeries;
+            if (!s || !s.labels || s.labels.length === 0) return hideMonTooltip();
+            const rel = (x - s.padL) / Math.max(1, s.innerW);
+            const idx = Math.max(0, Math.min(s.labels.length - 1, Math.round(rel * (s.labels.length - 1))));
+            const total = Number(s.seriesA[idx] || 0);
+            const act = Number(s.seriesB[idx] || 0);
+            showMonTooltip(ev.clientX, ev.clientY, `Sesiones: ${total} · Activas: ${act}`, s.labels[idx] || '');
+        });
+        line.addEventListener('mouseleave', hideMonTooltip);
     }
 }
 
@@ -2444,15 +2503,22 @@ async function cargarMonitoreo() {
 
         if (topWaitEl) {
             topWaitEl.textContent = overview.top_wait
-                ? `${overview.top_wait.wait_class} · ${overview.top_wait.event} · ${overview.top_wait.cnt}`
-                : 'Sin waits relevantes';
+                ? `${overview.top_wait.wait_class} · ${overview.top_wait.event} · ${overview.top_wait.cnt} sesiones`
+                : 'Sin esperas relevantes';
         }
 
         if (sysEl) {
             const items = Array.isArray(overview.sysmetrics) ? overview.sysmetrics : [];
+            const nameMap = {
+                'Database Time Per Sec': 'Tiempo de BD por segundo',
+                'Database CPU Time Ratio': 'Ratio de CPU de BD',
+                'Host CPU Utilization (%)': 'CPU del host (%)',
+                'Executions Per Sec': 'Ejecuciones por segundo',
+                'User Calls Per Sec': 'Llamadas de usuario por segundo'
+            };
             sysEl.innerHTML = items.map(m => `
                 <div class="sysmetric">
-                    <div class="label">${m.METRIC_NAME}</div>
+                    <div class="label">${nameMap[m.METRIC_NAME] || m.METRIC_NAME}</div>
                     <div class="value">${fmt(m.VALUE)} ${m.UNIT || ''}</div>
                 </div>
             `).join('');
@@ -2536,6 +2602,10 @@ async function cargarMonitoreo() {
         if (chartSes) {
             const labels = monSeries.ts.map(t => new Date(t).toLocaleTimeString());
             drawLineChart('chart-sesiones', monSeries.sesiones, monSeries.activas, labels);
+            const legend = document.getElementById('chart-sesiones-legend');
+            if (legend) {
+                legend.innerHTML = `<span><span class="dot" style="background: rgba(15,42,67,0.88);"></span>Total</span><span><span class="dot" style="background: rgba(27,110,168,0.88);"></span>Activas</span>`;
+            }
         }
         if (chartWaits) {
             const entries = Object.entries(monSeries.waitsByClass || {})
@@ -2543,6 +2613,10 @@ async function cargarMonitoreo() {
                 .sort((a, b) => b.value - a.value)
                 .slice(0, 8);
             drawBarChart('chart-waits', entries);
+            const legend = document.getElementById('chart-waits-legend');
+            if (legend) {
+                legend.textContent = entries.length ? `Categorías: ${entries.map(e => `${e.fullLabel}=${e.value}`).join(' · ')}` : 'Sin datos';
+            }
         }
     } catch (err) {
         showToast(err.message, 'error');

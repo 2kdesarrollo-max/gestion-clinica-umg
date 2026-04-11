@@ -10,7 +10,7 @@
     <aside class="sidebar" id="sidebar-container"></aside>
     <main class="admin-main">
         <header class="main-header">
-            <h1>Monitoreo Oracle Database</h1>
+            <h1>Monitoreo de Oracle</h1>
             <div class="header-actions">
                 <label class="switch">
                     <input type="checkbox" id="mon-auto" checked>
@@ -27,6 +27,14 @@
             </div>
         </header>
 
+        <section class="table-card mon-help">
+            <h2>¿Qué se monitorea?</h2>
+            <div class="muted">
+                Este módulo lee métricas en tiempo real desde las vistas dinámicas de Oracle (V$SESSION, V$LOCK, V$TRANSACTION, V$SQL y V$SYSMETRIC).
+                Sirve para detectar carga alta, sesiones bloqueadas, locks activos, transacciones abiertas y consultas costosas.
+            </div>
+        </section>
+
         <section class="op-kpis">
             <div class="kpi">
                 <span class="kpi-label">Sesiones</span>
@@ -41,7 +49,7 @@
                 <span class="kpi-value" id="mon-kpi-bloqueadas">--</span>
             </div>
             <div class="kpi">
-                <span class="kpi-label">Bloqueos (lock holders)</span>
+                <span class="kpi-label">Bloqueos (quién bloquea)</span>
                 <span class="kpi-value" id="mon-kpi-bloqueos">--</span>
             </div>
         </section>
@@ -49,19 +57,22 @@
         <div class="sysmetrics" id="mon-sysmetrics"></div>
 
         <section class="op-tabs" role="tablist">
-            <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
-            <button class="tab-btn" data-tab="charts" type="button">Gráficos</button>
+            <button class="tab-btn active" data-tab="overview" type="button">Resumen</button>
+            <button class="tab-btn" data-tab="charts" type="button">Gráficas</button>
             <button class="tab-btn" data-tab="sesiones" type="button">Sesiones</button>
             <button class="tab-btn" data-tab="bloqueos" type="button">Bloqueos</button>
-            <button class="tab-btn" data-tab="waits" type="button">Waits</button>
-            <button class="tab-btn" data-tab="sql" type="button">Top SQL</button>
+            <button class="tab-btn" data-tab="waits" type="button">Esperas</button>
+            <button class="tab-btn" data-tab="sql" type="button">Consultas lentas</button>
             <button class="tab-btn" data-tab="tx" type="button">Transacciones</button>
         </section>
 
         <section class="op-view" id="tab-overview">
             <div class="table-card">
-                <h2>Top Wait</h2>
+                <h2>Principal espera (Top Wait)</h2>
                 <div class="muted" id="mon-top-wait">--</div>
+                <div class="muted mon-tip">
+                    Si esta sección muestra un evento repetido y “Sesiones bloqueadas” sube, es señal de contención o locks.
+                </div>
             </div>
         </section>
 
@@ -70,17 +81,19 @@
                 <div class="chart-card">
                     <div class="chart-head">
                         <div class="chart-title">Sesiones (últimos minutos)</div>
-                        <div class="chart-subtitle muted">Total vs activas</div>
+                        <div class="chart-subtitle muted">Total vs activas (mientras más activas, más carga)</div>
                     </div>
                     <canvas id="chart-sesiones" width="900" height="240"></canvas>
+                    <div id="chart-sesiones-legend" class="chart-legend muted"></div>
                 </div>
 
                 <div class="chart-card">
                     <div class="chart-head">
-                        <div class="chart-title">Waits por clase</div>
-                        <div class="chart-subtitle muted">Click para filtrar sesiones</div>
+                        <div class="chart-title">Esperas por categoría (Wait Class)</div>
+                        <div class="chart-subtitle muted">Toca una barra para filtrar la tabla de sesiones</div>
                     </div>
                     <canvas id="chart-waits" width="900" height="260"></canvas>
+                    <div id="chart-waits-legend" class="chart-legend muted"></div>
                 </div>
             </div>
         </section>
@@ -121,7 +134,7 @@
                 <div class="table-container">
                     <table id="mon-waits">
                         <thead>
-                            <tr><th>Wait Class</th><th>Evento</th><th>Sesiones</th></tr>
+                            <tr><th>Categoría</th><th>Evento</th><th>Sesiones</th></tr>
                         </thead>
                         <tbody id="mon-waits-body"></tbody>
                     </table>
@@ -134,7 +147,7 @@
                 <div class="table-container">
                     <table id="mon-top-sql">
                         <thead>
-                            <tr><th>SQL_ID</th><th>Schema</th><th>Elapsed</th><th>CPU</th><th>Ejec</th><th>Rows</th><th>SQL</th></tr>
+                            <tr><th>SQL_ID</th><th>Schema</th><th>Tiempo</th><th>CPU</th><th>Ejecuciones</th><th>Filas</th><th>SQL</th></tr>
                         </thead>
                         <tbody id="mon-top-sql-body"></tbody>
                     </table>
@@ -147,7 +160,7 @@
                 <div class="table-container">
                     <table id="mon-tx">
                         <thead>
-                            <tr><th>Start</th><th>Status</th><th>SID</th><th>Usuario</th><th>Máquina</th><th>Programa</th></tr>
+                            <tr><th>Inicio</th><th>Estado</th><th>SID</th><th>Usuario</th><th>Máquina</th><th>Programa</th></tr>
                         </thead>
                         <tbody id="mon-tx-body"></tbody>
                     </table>
@@ -156,6 +169,7 @@
         </section>
     </main>
     <script src="js/admin.js"></script>
+    <div id="mon-tooltip" class="chart-tooltip" style="display:none;"></div>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const user = JSON.parse(localStorage.getItem('admin_user'));

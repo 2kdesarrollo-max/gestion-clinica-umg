@@ -709,6 +709,50 @@ body {
     border: 1px solid rgba(16,24,40,0.06);
 }
 
+.mon-help h2 {
+    margin: 0 0 6px;
+}
+
+.mon-tip {
+    margin-top: 10px;
+}
+
+.chart-legend {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.chart-legend .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+.chart-tooltip {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(16,24,40,0.12);
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 16px 40px rgba(16,24,40,0.14);
+    color: rgba(15,42,67,0.95);
+    font-weight: 700;
+    max-width: min(360px, 92vw);
+}
+
+.chart-tooltip .sub {
+    margin-top: 4px;
+    font-weight: 650;
+    color: rgba(31,41,55,0.72);
+}
+
 .skeleton {
     background: linear-gradient(90deg, rgba(16,24,40,0.06) 25%, rgba(16,24,40,0.12) 37%, rgba(16,24,40,0.06) 63%);
     background-size: 400% 100%;
