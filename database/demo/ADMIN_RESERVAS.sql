@@ -6,7 +6,7 @@ PROMPT ============================================================
 PROMPT ADMIN_RESERVAS - Operaciones (reservar/programar/cancelar)
 PROMPT ============================================================
 
-PROMPT 1) Crear solicitud (SP_RESERVAR_QUIROFANO)
+PROMPT 1) Reserva -> Programacion -> Cancelacion (y cleanup)
 DECLARE
   v_paciente NUMBER;
   v_medico NUMBER;
@@ -40,19 +40,8 @@ BEGIN
     p_creado_por => 'ADMIN_RESERVAS',
     p_id_reserva => v_id
   );
-
+  COMMIT;
   DBMS_OUTPUT.PUT_LINE('Reserva creada ID=' || v_id);
-END;
-/
-
-PROMPT 2) Programar (UPDATE a APROBADA) y asignar observaciones
-DECLARE
-  v_id NUMBER;
-BEGIN
-  SELECT id_reserva INTO v_id
-  FROM SUPERADMIN.RESERVAS
-  WHERE tipo_cirugia = 'DEMO_RESERVA'
-  ORDER BY fecha_creacion DESC FETCH FIRST 1 ROWS ONLY;
 
   UPDATE SUPERADMIN.RESERVAS
   SET estado = 'APROBADA',
@@ -60,21 +49,18 @@ BEGIN
   WHERE id_reserva = v_id;
   COMMIT;
   DBMS_OUTPUT.PUT_LINE('Reserva programada ID=' || v_id);
-END;
-/
-
-PROMPT 3) Cancelar (SP_CANCELAR_RESERVA)
-DECLARE
-  v_id NUMBER;
-BEGIN
-  SELECT id_reserva INTO v_id
-  FROM SUPERADMIN.RESERVAS
-  WHERE tipo_cirugia = 'DEMO_RESERVA'
-  ORDER BY fecha_creacion DESC FETCH FIRST 1 ROWS ONLY;
 
   SP_CANCELAR_RESERVA(v_id, 'Cancelacion demo', 'ADMIN_RESERVAS');
   COMMIT;
   DBMS_OUTPUT.PUT_LINE('Cancelada ID=' || v_id);
+
+  DELETE FROM SUPERADMIN.RESERVA_EQUIPOS WHERE id_reserva = v_id;
+  DELETE FROM SUPERADMIN.VALIDACIONES WHERE id_reserva = v_id;
+  DELETE FROM SUPERADMIN.CONFIRMACIONES WHERE id_reserva = v_id;
+  DELETE FROM SUPERADMIN.REPROGRAMACIONES WHERE id_reserva = v_id;
+  DELETE FROM SUPERADMIN.AUDITORIA_RESERVAS WHERE tabla_afectada = 'RESERVAS' AND id_registro = v_id;
+  DELETE FROM SUPERADMIN.RESERVAS WHERE id_reserva = v_id;
+  COMMIT;
+  DBMS_OUTPUT.PUT_LINE('Cleanup completo ID=' || v_id);
 END;
 /
-

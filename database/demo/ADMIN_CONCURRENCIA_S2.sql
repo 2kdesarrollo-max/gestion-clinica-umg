@@ -17,24 +17,31 @@ DECLARE
   v_medico NUMBER;
   v_quirofano NUMBER;
   v_especialidad NUMBER;
+  v_id NUMBER;
 BEGIN
   SELECT id_paciente INTO v_paciente FROM SUPERADMIN.PACIENTES WHERE activo = 1 FETCH FIRST 1 ROWS ONLY;
   SELECT id_medico INTO v_medico FROM SUPERADMIN.MEDICOS WHERE activo = 1 FETCH FIRST 1 ROWS ONLY;
   SELECT id_quirofano INTO v_quirofano FROM SUPERADMIN.QUIROFANOS WHERE activo = 1 FETCH FIRST 1 ROWS ONLY;
   SELECT id_especialidad INTO v_especialidad FROM SUPERADMIN.ESPECIALIDADES FETCH FIRST 1 ROWS ONLY;
 
+  v_id := SUPERADMIN.SEQ_RESERVAS.NEXTVAL;
   INSERT INTO SUPERADMIN.RESERVAS (
     id_reserva, id_paciente, id_medico, id_quirofano, id_especialidad,
     tipo_cirugia, descripcion_necesidad, fecha_reserva, hora_inicio, hora_fin,
     estado, prioridad, fecha_creacion, creado_por, observaciones
   ) VALUES (
-    SUPERADMIN.SEQ_RESERVAS.NEXTVAL, v_paciente, v_medico, v_quirofano, v_especialidad,
+    v_id, v_paciente, v_medico, v_quirofano, v_especialidad,
     'PRUEBA_CONCURRENCIA', 'Insert para phantom', TRUNC(SYSDATE),
     TRUNC(SYSDATE) + (8/24), TRUNC(SYSDATE) + (9/24),
     'SOLICITADA', 'NORMAL', SYSDATE, 'ADMIN_CONCURRENCIA', NULL
   );
   COMMIT;
   DBMS_OUTPUT.PUT_LINE('INSERT+COMMIT ejecutado. S1 debe ver cambio en conteo.');
+  DBMS_OUTPUT.PUT_LINE('Esperando 12s para que S1 haga la segunda lectura...');
+  DBMS_LOCK.SLEEP(12);
+  DELETE FROM SUPERADMIN.RESERVAS WHERE id_reserva = v_id;
+  COMMIT;
+  DBMS_OUTPUT.PUT_LINE('Cleanup: reserva borrada id=' || v_id);
 END;
 /
 
@@ -64,8 +71,7 @@ DECLARE
 BEGIN
   SELECT id_paciente INTO v_id FROM SUPERADMIN.PACIENTES WHERE activo = 1 FETCH FIRST 1 ROWS ONLY;
   UPDATE SUPERADMIN.PACIENTES SET telefono = telefono WHERE id_paciente = v_id;
-  COMMIT;
-  DBMS_OUTPUT.PUT_LINE('UPDATE ejecutado. Si no espero, es que no habia lock.');
+  ROLLBACK;
+  DBMS_OUTPUT.PUT_LINE('UPDATE ejecutado y ROLLBACK. Si no espero, es que no habia lock.');
 END;
 /
-

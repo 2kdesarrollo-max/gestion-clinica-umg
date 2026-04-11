@@ -14,11 +14,17 @@ ORDER BY fecha_hora DESC FETCH FIRST 20 ROWS ONLY;
 PROMPT 2) Probar auditoria: actualizar observaciones de una reserva y luego ver log
 DECLARE
   v_id NUMBER;
+  v_old VARCHAR2(500);
 BEGIN
   SELECT id_reserva INTO v_id FROM SUPERADMIN.RESERVAS ORDER BY fecha_creacion DESC FETCH FIRST 1 ROWS ONLY;
+  SELECT observaciones INTO v_old FROM SUPERADMIN.RESERVAS WHERE id_reserva = v_id;
   UPDATE SUPERADMIN.RESERVAS SET observaciones = 'AUDIT_TEST ' || TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS') WHERE id_reserva = v_id;
   COMMIT;
   DBMS_OUTPUT.PUT_LINE('Reserva actualizada: ' || v_id);
+
+  UPDATE SUPERADMIN.RESERVAS SET observaciones = v_old WHERE id_reserva = v_id;
+  COMMIT;
+  DBMS_OUTPUT.PUT_LINE('Cleanup: observaciones restauradas: ' || v_id);
 END;
 /
 
@@ -40,4 +46,3 @@ SELECT db_user, object_schema, object_name, policy_name, sql_text, timestamp
 FROM DBA_FGA_AUDIT_TRAIL
 WHERE object_schema = 'SUPERADMIN'
 ORDER BY timestamp DESC FETCH FIRST 20 ROWS ONLY;
-
